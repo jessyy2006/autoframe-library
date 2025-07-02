@@ -12,6 +12,7 @@ let faceDetector; // type: FaceDetector
 let TARGET_FACE_RATIO;
 let SMOOTHING_FACTOR;
 let keepZoomReset;
+
 // add public export method of lib which accepts input stream and returns output stream.
 async function loadConfig() {
   try {
