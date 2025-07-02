@@ -13,6 +13,7 @@ let TARGET_FACE_RATIO;
 let SMOOTHING_FACTOR;
 let keepZoomReset;
 
+// init -> set config as param
 // add public export method of lib which accepts input stream and returns output stream.
 async function loadConfig() {
   try {
@@ -59,22 +60,15 @@ const initializefaceDetector = async () => {
 /*************************************************/
 // CONTINUOUS FACE DETECTION
 /*************************************************/
-let videoFull: HTMLVideoElement = document.getElementById(
-  "webcamFull"
-) as HTMLVideoElement; // html element, empty frame for video
 let videoZoom: HTMLVideoElement = document.getElementById(
   "webcamMask"
 ) as HTMLVideoElement; // empty frame for masked video png
 
 // canvas setup
-// const canvas = new OffscreenCanvas(320, 200);
 const canvas = document.createElement("canvas");
-// document.getElementById("framedOutput");
 const ctx = canvas.getContext("2d");
 
 // video setup
-const liveFullView = document.getElementById("liveFullView"); // can't change constant vars
-const liveMaskView = document.getElementById("liveMaskView"); // div holding the video screen and face detection graphics.
 let enableWebcamButton; // type: HTMLButtonElement
 let children = []; // Keep a reference of all the child elements we create on video stream so we can remove them easily on each render.
 
@@ -103,21 +97,13 @@ async function enableCam(event) {
   navigator.mediaDevices
     .getUserMedia(constraints) // returns a Promise — meaning it's asynchronous
     .then(function (stream) {
-      // stream = a MediaStream object created by getUserMedia()= the actual webcam feed
-      // runs when the user accepts cam permissions and the webcam stream is ready.
-      // .then(func ()): waits for the Promise by getUserMedia to finish. Once it’s ready, .then() runs the function you write below w the parameter as the thing getUserMedia returns/the thing you're waiting for (ex. When the webcam is ready, run this function and give it the video stream)
-
-      videoFull.srcObject = stream; // link stream to video html element, which until now was just empty frame
-      // videoZoom.srcObject = stream;
       videoZoom.srcObject = exportFramedStream();
 
-      videoFull.addEventListener("loadeddata", () => {
-        predictWebcam();
-      }); // When the video finishes loading and is ready to play, run the predictWebcam function.
+      // When the video finishes loading and is ready to play, run the predictWebcam function.
       videoZoom.addEventListener("loadeddata", predictWebcam);
 
       const videoTrack = stream.getVideoTracks()[0];
-      const settings = videoTrack.getSettings();
+      // const settings = videoTrack.getSettings();
 
       // Store live settings in config so canvas size = video size
       // CONFIG.canvas.width = settings.width;
@@ -134,6 +120,7 @@ async function enableCam(event) {
     });
 }
 
+// FUNCTION CALLED IN ENABLECAM
 let lastVideoTime = -1; // to make sure the func can start (-1 will never be equal to the video time)
 /**
  * Recursive function to continuously track face
@@ -141,10 +128,10 @@ let lastVideoTime = -1; // to make sure the func can start (-1 will never be equ
 async function predictWebcam() {
   let startTimeMs = performance.now();
   // Detect faces using detectForVideo
-  if (videoFull.currentTime !== lastVideoTime) {
-    lastVideoTime = videoFull.currentTime;
+  if (videoZoom.currentTime !== lastVideoTime) {
+    lastVideoTime = videoZoom.currentTime;
     const detections = faceDetector.detectForVideo(
-      videoFull,
+      videoZoom,
       startTimeMs
     ).detections;
     // above line returns an object w params: {
@@ -155,86 +142,11 @@ async function predictWebcam() {
     //   keypoints: [ /* facial landmarks */ ],
     //   confidence: 0.98 // detection certainty
     // }
-    displayVideoDetections(detections); // calling func below using the face positions/landmarks in pixel coordinates stored in "detections" => VISUALIZES DETECTIONS. since mediapipe orders the most prominently detected face first, detections[0] is the most obvious face.
-
     processFrame(detections);
   }
 
   // Call this function again to keep predicting when the browser is ready
   window.requestAnimationFrame(predictWebcam);
-}
-
-/**
- * VISUALIZES DETECTIONS for each frame on video element. Detects multiple people.
- * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
- */
-function displayVideoDetections(detections) {
-  // Remove any highlighting from previous frame (constantly updating each frame).
-  for (let child of children) {
-    liveFullView.removeChild(child);
-  }
-  children.splice(0);
-
-  // Iterate through predictions and draw them to the live view
-  for (let detection of detections) {
-    // create % sign
-    const p = document.createElement("p");
-    p.innerText =
-      "Confidence: " +
-      Math.round(parseFloat(detection.categories[0].score) * 100) +
-      "%"; // gets score as float, turns into percent, rounds to whole number
-
-    p.style = // style position of the percent
-      "left: " +
-      (videoFull.offsetWidth -
-        detection.boundingBox.width -
-        detection.boundingBox.originX) +
-      "px;" +
-      "top: " +
-      (detection.boundingBox.originY - 30) +
-      "px; " +
-      "width: " +
-      (detection.boundingBox.width - 10) +
-      "px;";
-
-    // create box
-    const highlighter = document.createElement("div");
-    highlighter.setAttribute("class", "highlighter"); // assign css class styling "highlighter"
-    highlighter.style =
-      "left: " +
-      (videoFull.offsetWidth -
-        detection.boundingBox.width -
-        detection.boundingBox.originX) +
-      "px;" +
-      "top: " +
-      detection.boundingBox.originY +
-      "px;" +
-      "width: " +
-      (detection.boundingBox.width - 10) +
-      "px;" +
-      "height: " +
-      detection.boundingBox.height +
-      "px;";
-
-    // add both objects to livestream
-    liveFullView.appendChild(highlighter);
-    liveFullView.appendChild(p);
-
-    // Store drawn objects in memory so they are queued to delete at next call
-    children.push(highlighter);
-    children.push(p);
-
-    for (let keypoint of detection.keypoints) {
-      const keypointEl = document.createElement("span"); // make an element to represent the keypoint
-      keypointEl.className = "key-point"; // assign it a styling class in css
-      keypointEl.style.top = `${keypoint.y * videoFull.offsetHeight - 3}px`; // adjust its location to fit the video
-      keypointEl.style.left = `${
-        videoFull.offsetWidth - keypoint.x * videoFull.offsetWidth - 3
-      }px`;
-      liveFullView.appendChild(keypointEl); // add to liveFullView
-      children.push(keypointEl); // add to children so that it can be deleted on the next frame
-    }
-  }
 }
 
 /*************************************************/
@@ -246,7 +158,6 @@ let smoothedX = 0,
   smoothedY = 0,
   smoothedZoom = 0,
   firstDetection = true,
-  canvasStarted = false, // debugging only, remove
   oldFace = null;
 
 /**
@@ -285,14 +196,14 @@ function processFrame(detections) {
   let topLeftX = smoothedX - cropWidth / 2,
     topLeftY = smoothedY - cropHeight / 2;
 
-  topLeftX = Math.max(0, Math.min(topLeftX, videoFull.videoWidth - cropWidth));
+  topLeftX = Math.max(0, Math.min(topLeftX, videoZoom.videoWidth - cropWidth));
   topLeftY = Math.max(
     0,
-    Math.min(topLeftY, videoFull.videoHeight - cropHeight)
+    Math.min(topLeftY, videoZoom.videoHeight - cropHeight)
   );
 
   ctx.drawImage(
-    videoFull, // source video
+    videoZoom, // source video
 
     // cropped from source
     topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
@@ -306,12 +217,6 @@ function processFrame(detections) {
     canvas.width, // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
     canvas.height
   );
-  // if (!canvasStarted) {
-  //   console.log("canvas hasn't started being drawn");
-  //   videoZoom.srcObject = exportFramedStream();
-  //   console.log("Assigned stream to videoZoom:", videoZoom.srcObject);
-  //   canvasStarted = true;
-  // } // display captured stream
 }
 /******************************************************************** */
 // FUNCTIONS USED IN processFrame():
@@ -387,7 +292,7 @@ function didPositionChange(newFace, oldFace) {
   }
 }
 
-async function main() {
+export async function init() {
   await loadConfig();
 
   TARGET_FACE_RATIO = CONFIG.framing.TARGET_FACE_RATIO;
@@ -396,6 +301,7 @@ async function main() {
 
   await initializefaceDetector(); // returns promises
 
+  // this is specific to the user's site setup...how do i generalize this
   if (hasGetUserMedia()) {
     enableWebcamButton = document.getElementById("webcamButton");
     enableWebcamButton.addEventListener("click", enableCam); // When someone clicks this button, run the enableCam function
@@ -403,7 +309,7 @@ async function main() {
     console.warn("getUserMedia() is not supported by your browser");
   }
 }
-main();
+// init();
 
 function exportFramedStream() {
   console.log("inside exportFramedStream");
