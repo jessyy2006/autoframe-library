@@ -4072,9 +4072,9 @@ var faceDetector;
 var TARGET_FACE_RATIO;
 var SMOOTHING_FACTOR;
 var keepZoomReset;
-async function loadConfig() {
+async function loadConfig(config_path) {
   try {
-    const response = await fetch("./config.json");
+    const response = await fetch(config_path);
     if (!response.ok) {
       throw new Error(
         `HTTP error! status: ${response.status} while fetching config.json`
@@ -4105,36 +4105,23 @@ var initializefaceDetector = async () => {
     // 0.7, update these based on config
   });
 };
-var videoFull = document.getElementById("webcamFull");
-var videoZoom = document.getElementById("webcamMask");
+var videoElement = document.getElementById(
+  "webcamMask"
+);
 var canvas = document.createElement("canvas");
 var ctx = canvas.getContext("2d");
-var liveFullView = document.getElementById("liveFullView");
-var liveMaskView = document.getElementById("liveMaskView");
-var enableWebcamButton;
-var children = [];
-var hasGetUserMedia = () => {
-  var _a2;
-  return !!((_a2 = navigator.mediaDevices) == null ? void 0 : _a2.getUserMedia);
-};
-async function enableCam(event) {
+async function enableCam(event, videoElement2) {
   if (!faceDetector) {
     alert("Face Detector is still loading. Please try again..");
     return;
   }
-  enableWebcamButton.remove();
   const constraints = {
     video: true
   };
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-    videoFull.srcObject = stream;
-    videoZoom.srcObject = exportFramedStream();
-    videoFull.addEventListener("loadeddata", () => {
-      predictWebcam();
-    });
-    videoZoom.addEventListener("loadeddata", predictWebcam);
+    videoElement2.srcObject = exportFramedStream();
+    videoElement2.addEventListener("loadeddata", predictWebcam);
     const videoTrack = stream.getVideoTracks()[0];
-    const settings = videoTrack.getSettings();
     canvas.width = 320;
     canvas.height = 200;
   }).catch((err) => {
@@ -4144,43 +4131,15 @@ async function enableCam(event) {
 var lastVideoTime = -1;
 async function predictWebcam() {
   let startTimeMs = performance.now();
-  if (videoFull.currentTime !== lastVideoTime) {
-    lastVideoTime = videoFull.currentTime;
+  if (videoElement.currentTime !== lastVideoTime) {
+    lastVideoTime = videoElement.currentTime;
     const detections = faceDetector.detectForVideo(
-      videoFull,
+      videoElement,
       startTimeMs
     ).detections;
-    displayVideoDetections(detections);
     processFrame(detections);
   }
   window.requestAnimationFrame(predictWebcam);
-}
-function displayVideoDetections(detections) {
-  for (let child of children) {
-    liveFullView.removeChild(child);
-  }
-  children.splice(0);
-  for (let detection of detections) {
-    const p2 = document.createElement("p");
-    p2.innerText = "Confidence: " + Math.round(parseFloat(detection.categories[0].score) * 100) + "%";
-    p2.style = // style position of the percent
-    "left: " + (videoFull.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX) + "px;top: " + (detection.boundingBox.originY - 30) + "px; width: " + (detection.boundingBox.width - 10) + "px;";
-    const highlighter = document.createElement("div");
-    highlighter.setAttribute("class", "highlighter");
-    highlighter.style = "left: " + (videoFull.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX) + "px;top: " + detection.boundingBox.originY + "px;width: " + (detection.boundingBox.width - 10) + "px;height: " + detection.boundingBox.height + "px;";
-    liveFullView.appendChild(highlighter);
-    liveFullView.appendChild(p2);
-    children.push(highlighter);
-    children.push(p2);
-    for (let keypoint of detection.keypoints) {
-      const keypointEl = document.createElement("span");
-      keypointEl.className = "key-point";
-      keypointEl.style.top = `${keypoint.y * videoFull.offsetHeight - 3}px`;
-      keypointEl.style.left = `${videoFull.offsetWidth - keypoint.x * videoFull.offsetWidth - 3}px`;
-      liveFullView.appendChild(keypointEl);
-      children.push(keypointEl);
-    }
-  }
 }
 var smoothedX = 0;
 var smoothedY = 0;
@@ -4207,13 +4166,16 @@ function processFrame(detections) {
   let cropWidth = canvas.width / smoothedZoom;
   let cropHeight = canvas.height / smoothedZoom;
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
-  topLeftX = Math.max(0, Math.min(topLeftX, videoFull.videoWidth - cropWidth));
+  topLeftX = Math.max(
+    0,
+    Math.min(topLeftX, videoElement.videoWidth - cropWidth)
+  );
   topLeftY = Math.max(
     0,
-    Math.min(topLeftY, videoFull.videoHeight - cropHeight)
+    Math.min(topLeftY, videoElement.videoHeight - cropHeight)
   );
   ctx.drawImage(
-    videoFull,
+    videoElement,
     // source video
     // cropped from source
     topLeftX,
@@ -4246,15 +4208,15 @@ function faceFrame(face) {
     zoomReset();
   }
   if (firstDetection) {
-    smoothedX = videoFull.videoWidth / 2;
-    smoothedY = videoFull.videoHeight / 2;
+    smoothedX = videoElement.videoWidth / 2;
+    smoothedY = videoElement.videoHeight / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
 }
 function zoomReset() {
-  smoothedX = videoFull.videoWidth / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
-  smoothedY = videoFull.videoHeight / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
+  smoothedX = videoElement.videoWidth / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
+  smoothedY = videoElement.videoHeight / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
 function didPositionChange(newFace, oldFace2) {
@@ -4272,22 +4234,19 @@ function didPositionChange(newFace, oldFace2) {
     return false;
   }
 }
-async function main() {
-  await loadConfig();
+async function init(config_path) {
+  await loadConfig(config_path);
   TARGET_FACE_RATIO = CONFIG.framing.TARGET_FACE_RATIO;
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
   keepZoomReset = CONFIG.framing.keepZoomReset;
   await initializefaceDetector();
-  if (hasGetUserMedia()) {
-    enableWebcamButton = document.getElementById("webcamButton");
-    enableWebcamButton.addEventListener("click", enableCam);
-  } else {
-    console.warn("getUserMedia() is not supported by your browser");
-  }
 }
-main();
 function exportFramedStream() {
   console.log("inside exportFramedStream");
   return canvas.captureStream();
 }
+export {
+  enableCam,
+  init
+};
 //# sourceMappingURL=lib.js.map

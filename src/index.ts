@@ -44,7 +44,7 @@ async function loadConfig(config_path: string) {
 const initializefaceDetector = async () => {
   const vision = await FilesetResolver.forVisionTasks(
     // use await to pause the async func and temporarily return to main thread until promise resolves: force js to finish this statement first before moving onto the second, as the second is dependent on the first. however, browser can still load animations, etc during this time
-    CONFIG.mediapipe.visionTasksWasm
+    CONFIG.mediapipe.visionTasksWasm // do i still need this if using mediapipe import
   ); // "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm" // location of the WebAssembly (WASM) files and other essential assets that the Mediapipe FilesetResolver needs to load to function correctly.
 
   faceDetector = await FaceDetector.createFromOptions(vision, {
@@ -61,9 +61,6 @@ const initializefaceDetector = async () => {
 /*************************************************/
 // CONTINUOUS FACE DETECTION
 /*************************************************/
-let videoElement: HTMLVideoElement = document.getElementById(
-  "webcamMask"
-) as HTMLVideoElement; // empty frame for masked video png
 
 // canvas setup
 const canvas = document.createElement("canvas");
@@ -100,7 +97,9 @@ export async function enableCam(event: Event, videoElement: HTMLVideoElement) {
       videoElement.srcObject = exportFramedStream();
 
       // When the video finishes loading and is ready to play, run the predictWebcam function.
-      videoElement.addEventListener("loadeddata", predictWebcam);
+      videoElement.addEventListener("loadeddata", (event) => {
+        predictWebcam(videoElement);
+      });
 
       const videoTrack = stream.getVideoTracks()[0];
       // const settings = videoTrack.getSettings();
@@ -125,7 +124,7 @@ let lastVideoTime = -1; // to make sure the func can start (-1 will never be equ
 /**
  * Recursive function to continuously track face
  */
-async function predictWebcam() {
+async function predictWebcam(videoElement: HTMLVideoElement) {
   let startTimeMs = performance.now();
   // Detect faces using detectForVideo
   if (videoElement.currentTime !== lastVideoTime) {
@@ -142,11 +141,11 @@ async function predictWebcam() {
     //   keypoints: [ /* facial landmarks */ ],
     //   confidence: 0.98 // detection certainty
     // }
-    processFrame(detections);
+    processFrame(detections, videoElement);
   }
 
   // Call this function again to keep predicting when the browser is ready
-  window.requestAnimationFrame(predictWebcam);
+  window.requestAnimationFrame(() => predictWebcam(videoElement));
 }
 
 /*************************************************/
@@ -164,7 +163,7 @@ let smoothedX = 0,
  * Processes each frame's autoframe crop box and draws it to canvas.
  * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
  */
-function processFrame(detections) {
+function processFrame(detections, videoElement: HTMLVideoElement) {
   if (detections && detections.length > 0) {
     // if there is a face
     const newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
@@ -177,16 +176,16 @@ function processFrame(detections) {
     // 2. has there been a significant jump or not?
     if (didPositionChange(newFace, oldFace)) {
       // if true, track newFace
-      faceFrame(newFace);
+      faceFrame(newFace, videoElement);
       oldFace = newFace; // if face moved a lot, now new pos = "old" pos as the reference.
     } else {
       // track oldFace
-      faceFrame(oldFace);
+      faceFrame(oldFace, videoElement);
     }
   } else {
     if (keepZoomReset) {
       // if user wants camera to zoom out if no face detected
-      zoomReset();
+      zoomReset(videoElement);
     } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
   }
 
@@ -228,7 +227,7 @@ function processFrame(detections) {
  * Sets up smoothed bounding parameters to autoframe face
  * @param {detection.boundingBox} face - bounding box of tracked face
  */
-function faceFrame(face) {
+function faceFrame(face, videoElement: HTMLVideoElement) {
   // EMA formula: smoothedY = targetY * α + smoothedY * (1 - α)
   let xCenter = face.originX + face.width / 2; // x center of face
   let yCenter = face.originY + face.height / 2; // current raw value
@@ -246,7 +245,7 @@ function faceFrame(face) {
     smoothedZoom =
       zoomScale * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
   } else {
-    zoomReset(); // reset zoom to 1
+    zoomReset(videoElement); // reset zoom to 1
   }
 
   // Edge case 2: first detection of face = avoid blooming projection onto canvas
@@ -260,7 +259,7 @@ function faceFrame(face) {
 /**
  * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
  */
-function zoomReset() {
+function zoomReset(videoElement: HTMLVideoElement) {
   smoothedX =
     (videoElement.videoWidth / 2) * SMOOTHING_FACTOR +
     (1 - SMOOTHING_FACTOR) * smoothedX;
