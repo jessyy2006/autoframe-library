@@ -2,17 +2,17 @@
   "name": "rainbow-auto-framing",
   "version": "1.0.0",
   "type": "module",
-  "main": "lib/cjs/index.js",
-  "module": "lib/index.js",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
   "types": "lib/",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
-      "import": "./lib/index.js"
+      "import": "./dist/lib.js"
     },
     "./*": {
       "types": "./lib/*",
-      "import": "./lib/index.js"
+      "import": "./dist/lib.js"
     }
   },
   "scripts": {
