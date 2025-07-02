@@ -6,7 +6,7 @@ export interface AutoFramingConfig {
 
 // Global variables
 let CONFIG: any = {}; // object to hold config
-let faceDetector; // type: FaceDetector
+let faceDetector: FaceDetector; // type: FaceDetector
 
 // defined in config
 let TARGET_FACE_RATIO;
@@ -70,7 +70,6 @@ const ctx = canvas.getContext("2d");
 
 // video setup
 let enableWebcamButton; // type: HTMLButtonElement
-let children = []; // Keep a reference of all the child elements we create on video stream so we can remove them easily on each render.
 
 // Check if webcam access is supported.
 const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia; // !! converts the result to true or false
