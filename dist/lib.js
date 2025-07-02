@@ -4091,6 +4091,7 @@ var initializefaceDetector = async () => {
   const vision = await Uo.forVisionTasks(
     // use await to pause the async func and temporarily return to main thread until promise resolves: force js to finish this statement first before moving onto the second, as the second is dependent on the first. however, browser can still load animations, etc during this time
     CONFIG.mediapipe.visionTasksWasm
+    // do i still need this if using mediapipe import
   );
   faceDetector = await Za.createFromOptions(vision, {
     baseOptions: {
@@ -4105,12 +4106,9 @@ var initializefaceDetector = async () => {
     // 0.7, update these based on config
   });
 };
-var videoElement = document.getElementById(
-  "webcamMask"
-);
 var canvas = document.createElement("canvas");
 var ctx = canvas.getContext("2d");
-async function enableCam(event, videoElement2) {
+async function enableCam(event, videoElement) {
   if (!faceDetector) {
     alert("Face Detector is still loading. Please try again..");
     return;
@@ -4119,8 +4117,10 @@ async function enableCam(event, videoElement2) {
     video: true
   };
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-    videoElement2.srcObject = exportFramedStream();
-    videoElement2.addEventListener("loadeddata", predictWebcam);
+    videoElement.srcObject = exportFramedStream();
+    videoElement.addEventListener("loadeddata", (event2) => {
+      predictWebcam(videoElement);
+    });
     const videoTrack = stream.getVideoTracks()[0];
     canvas.width = 320;
     canvas.height = 200;
@@ -4129,7 +4129,7 @@ async function enableCam(event, videoElement2) {
   });
 }
 var lastVideoTime = -1;
-async function predictWebcam() {
+async function predictWebcam(videoElement) {
   let startTimeMs = performance.now();
   if (videoElement.currentTime !== lastVideoTime) {
     lastVideoTime = videoElement.currentTime;
@@ -4137,30 +4137,30 @@ async function predictWebcam() {
       videoElement,
       startTimeMs
     ).detections;
-    processFrame(detections);
+    processFrame(detections, videoElement);
   }
-  window.requestAnimationFrame(predictWebcam);
+  window.requestAnimationFrame(() => predictWebcam(videoElement));
 }
 var smoothedX = 0;
 var smoothedY = 0;
 var smoothedZoom = 0;
 var firstDetection = true;
 var oldFace = null;
-function processFrame(detections) {
+function processFrame(detections, videoElement) {
   if (detections && detections.length > 0) {
     const newFace = detections[0].boundingBox;
     if (!oldFace) {
       oldFace = newFace;
     }
     if (didPositionChange(newFace, oldFace)) {
-      faceFrame(newFace);
+      faceFrame(newFace, videoElement);
       oldFace = newFace;
     } else {
-      faceFrame(oldFace);
+      faceFrame(oldFace, videoElement);
     }
   } else {
     if (keepZoomReset) {
-      zoomReset();
+      zoomReset(videoElement);
     }
   }
   let cropWidth = canvas.width / smoothedZoom;
@@ -4195,7 +4195,7 @@ function processFrame(detections) {
     canvas.height
   );
 }
-function faceFrame(face) {
+function faceFrame(face, videoElement) {
   let xCenter = face.originX + face.width / 2;
   let yCenter = face.originY + face.height / 2;
   smoothedX = xCenter * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
@@ -4205,7 +4205,7 @@ function faceFrame(face) {
   if (zoomScale >= 1) {
     smoothedZoom = zoomScale * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
   } else {
-    zoomReset();
+    zoomReset(videoElement);
   }
   if (firstDetection) {
     smoothedX = videoElement.videoWidth / 2;
@@ -4214,7 +4214,7 @@ function faceFrame(face) {
     firstDetection = false;
   }
 }
-function zoomReset() {
+function zoomReset(videoElement) {
   smoothedX = videoElement.videoWidth / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
   smoothedY = videoElement.videoHeight / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
