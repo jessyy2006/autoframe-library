@@ -1,6 +1,7 @@
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 export interface AutoFramingConfig {
+  // should i update this to also have the rest of the stuff needed in the cnofig?
   apiBaseUrl?: string;
 }
 
@@ -15,10 +16,10 @@ let keepZoomReset;
 
 // init -> set config as param
 // add public export method of lib which accepts input stream and returns output stream.
-async function loadConfig() {
+async function loadConfig(config_path: string) {
   try {
     // 1. Use fetch to get the JSON file
-    const response = await fetch("./config.json");
+    const response = await fetch(config_path);
 
     // 2. Check if the network request was successful
     if (!response.ok) {
@@ -60,7 +61,7 @@ const initializefaceDetector = async () => {
 /*************************************************/
 // CONTINUOUS FACE DETECTION
 /*************************************************/
-let videoZoom: HTMLVideoElement = document.getElementById(
+let videoElement: HTMLVideoElement = document.getElementById(
   "webcamMask"
 ) as HTMLVideoElement; // empty frame for masked video png
 
@@ -68,24 +69,24 @@ let videoZoom: HTMLVideoElement = document.getElementById(
 const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
 
-// video setup
-let enableWebcamButton; // type: HTMLButtonElement
+// // video setup
+// let enableWebcamButton; // type: HTMLButtonElement
 
-// Check if webcam access is supported.
-const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia; // !! converts the result to true or false
+// // Check if webcam access is supported.
+// const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia; // !! converts the result to true or false
 
 /**
  * Enable live webcam view and start detection.
  * @param {event} event - event = click.
  */
-async function enableCam(event) {
+export async function enableCam(event: Event, videoElement: HTMLVideoElement) {
   if (!faceDetector) {
     alert("Face Detector is still loading. Please try again..");
     return;
   }
 
-  // Remove the button.
-  enableWebcamButton.remove();
+  // // Remove the button.
+  // enableWebcamButton.remove();
 
   // getUsermedia parameters
   const constraints = {
@@ -96,10 +97,10 @@ async function enableCam(event) {
   navigator.mediaDevices
     .getUserMedia(constraints) // returns a Promise — meaning it's asynchronous
     .then(function (stream) {
-      videoZoom.srcObject = exportFramedStream();
+      videoElement.srcObject = exportFramedStream();
 
       // When the video finishes loading and is ready to play, run the predictWebcam function.
-      videoZoom.addEventListener("loadeddata", predictWebcam);
+      videoElement.addEventListener("loadeddata", predictWebcam);
 
       const videoTrack = stream.getVideoTracks()[0];
       // const settings = videoTrack.getSettings();
@@ -127,10 +128,10 @@ let lastVideoTime = -1; // to make sure the func can start (-1 will never be equ
 async function predictWebcam() {
   let startTimeMs = performance.now();
   // Detect faces using detectForVideo
-  if (videoZoom.currentTime !== lastVideoTime) {
-    lastVideoTime = videoZoom.currentTime;
+  if (videoElement.currentTime !== lastVideoTime) {
+    lastVideoTime = videoElement.currentTime;
     const detections = faceDetector.detectForVideo(
-      videoZoom,
+      videoElement,
       startTimeMs
     ).detections;
     // above line returns an object w params: {
@@ -195,14 +196,17 @@ function processFrame(detections) {
   let topLeftX = smoothedX - cropWidth / 2,
     topLeftY = smoothedY - cropHeight / 2;
 
-  topLeftX = Math.max(0, Math.min(topLeftX, videoZoom.videoWidth - cropWidth));
+  topLeftX = Math.max(
+    0,
+    Math.min(topLeftX, videoElement.videoWidth - cropWidth)
+  );
   topLeftY = Math.max(
     0,
-    Math.min(topLeftY, videoZoom.videoHeight - cropHeight)
+    Math.min(topLeftY, videoElement.videoHeight - cropHeight)
   );
 
   ctx.drawImage(
-    videoZoom, // source video
+    videoElement, // source video
 
     // cropped from source
     topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
@@ -247,8 +251,8 @@ function faceFrame(face) {
 
   // Edge case 2: first detection of face = avoid blooming projection onto canvas
   if (firstDetection) {
-    smoothedX = videoFull.videoWidth / 2;
-    smoothedY = videoFull.videoHeight / 2;
+    smoothedX = videoElement.videoWidth / 2;
+    smoothedY = videoElement.videoHeight / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
@@ -258,10 +262,10 @@ function faceFrame(face) {
  */
 function zoomReset() {
   smoothedX =
-    (videoFull.videoWidth / 2) * SMOOTHING_FACTOR +
+    (videoElement.videoWidth / 2) * SMOOTHING_FACTOR +
     (1 - SMOOTHING_FACTOR) * smoothedX;
   smoothedY =
-    (videoFull.videoHeight / 2) * SMOOTHING_FACTOR +
+    (videoElement.videoHeight / 2) * SMOOTHING_FACTOR +
     (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
@@ -291,8 +295,8 @@ function didPositionChange(newFace, oldFace) {
   }
 }
 
-export async function init() {
-  await loadConfig();
+export async function init(config_path: string) {
+  await loadConfig(config_path);
 
   TARGET_FACE_RATIO = CONFIG.framing.TARGET_FACE_RATIO;
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
@@ -300,13 +304,13 @@ export async function init() {
 
   await initializefaceDetector(); // returns promises
 
-  // this is specific to the user's site setup...how do i generalize this
-  if (hasGetUserMedia()) {
-    enableWebcamButton = document.getElementById("webcamButton");
-    enableWebcamButton.addEventListener("click", enableCam); // When someone clicks this button, run the enableCam function
-  } else {
-    console.warn("getUserMedia() is not supported by your browser");
-  }
+  // // this is specific to the user's site setup...how do i generalize this
+  // if (hasGetUserMedia()) {
+  //   enableWebcamButton = document.getElementById("webcamButton");
+  //   enableWebcamButton.addEventListener("click", enableCam); // When someone clicks this button, run the enableCam function
+  // } else {
+  //   console.warn("getUserMedia() is not supported by your browser");
+  // }
 }
 // init();
 
