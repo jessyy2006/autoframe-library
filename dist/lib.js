@@ -4142,6 +4142,12 @@ async function predictionLoop(inputStream) {
     lastDetectionTime = now;
     try {
       sourceFrame = await videoFrame(inputStream);
+      let test = document.createElement("canvas");
+      test.width = sourceFrame.width;
+      test.height = sourceFrame.height;
+      let draw = test.getContext("2d");
+      document.body.appendChild(test);
+      draw.drawImage(sourceFrame, 0, 0);
       const detections = faceDetector.detectForVideo(
         sourceFrame,
         now

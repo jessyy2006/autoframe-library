@@ -203,6 +203,14 @@ async function predictionLoop(inputStream: MediaStream) {
       // Grab an ImageBitmap from the video track (snapshot frame)
       sourceFrame = await videoFrame(inputStream);
 
+      // does sourceFrame exist?
+      let test = document.createElement("canvas");
+      test.width = sourceFrame.width; // set canvas width
+      test.height = sourceFrame.height; // set canvas height
+      let draw = test.getContext("2d");
+      document.body.appendChild(test);
+
+      draw.drawImage(sourceFrame, 0, 0);
       // Run face detection on the ImageBitmap frame
       const detections = faceDetector.detectForVideo(
         sourceFrame,
