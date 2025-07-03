@@ -1,5 +1,5 @@
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
-let imageCapture: ImageCapture;
+
 export interface AutoFramingConfig {
   apiBaseUrl?: string; // what is this for again
 
@@ -41,6 +41,7 @@ let keepZoomReset;
 // init -> set config as param
 // add public export method of lib which accepts input stream and returns output stream.
 async function loadConfig(config_path: string) {
+  // rejig so tht it takes autoframing config object as param, so that init() can access width/heigt
   try {
     // 1. Use fetch to get the JSON file
     const response = await fetch(config_path);
@@ -147,18 +148,25 @@ const ctx = canvas.getContext("2d");
 
 // FUNCTION CALLED IN ENABLECAM
 let lastVideoTime = -1; // to make sure the func can start (-1 will never be equal to the video time)
+
+let track: MediaStreamTrack;
+let settings: MediaTrackSettings;
+let width = 0; // fneed to update to integrate config instead
+let height = 0;
 /**
  * Recursive function to continuously track face
  */
 export function autoframe(inputStream: MediaStream): MediaStream {
-  let dummy: MediaStream;
   let startTimeMs = performance.now();
   // Detect faces using detectForVideo. Use grabFrame from Image capture API, which returns imagebitmap which is supported by detectforvideo
+
+  track = inputStream.getTracks()[0];
+  settings = track.getSettings();
 
   if (inputStream.currentTime !== lastVideoTime) {
     lastVideoTime = inputStream.currentTime;
     const detections = faceDetector.detectForVideo(
-      // inputStream, replace w imagebitmap
+      videoFrame(inputStream), // inputStream, replace w imagebitmap
       startTimeMs
     ).detections;
     // above line returns an object w params: {
@@ -171,18 +179,16 @@ export function autoframe(inputStream: MediaStream): MediaStream {
     // }
     processFrame(detections, inputStream);
   }
-  // just for testing purposes
 
-  // Call this function again to keep predicting when the browser is ready
+  // Call this function again to keep predicting when the browser is ready. maybe not recusrive? but has to be recursive right? not sure.
   window.requestAnimationFrame(() => autoframe(inputStream));
   // make more efficient, call it only each second or each 500 ms or smth. everyb X seconds load frame
-  return dummy;
+  return exportStream;
 }
 
-// function to capture frame
-let videoFrame = (): ImageBitmap => {
-  const track = inputStream.getVideoTracks()[0];
-  imageCapture = new imageCapture(track);
+// helper function called by autoframe, processframe to capture frame
+let videoFrame = (inputStream: MediaStream): ImageBitmap => {
+  const imageCapture = new (window as any).ImageCapture(track);
   return imageCapture.grabFrame();
 };
 
@@ -233,17 +239,12 @@ function processFrame(detections, inputStream: MediaStream) {
   let topLeftX = smoothedX - cropWidth / 2,
     topLeftY = smoothedY - cropHeight / 2;
 
-  topLeftX = Math.max(
-    0,
-    Math.min(topLeftX, inputStream.videoWidth - cropWidth)
-  );
-  topLeftY = Math.max(
-    0,
-    Math.min(topLeftY, inputStream.videoHeight - cropHeight)
-  );
+  topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
+  topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
 
   ctx.drawImage(
-    inputStream, // source video
+    // doesnt take mediastream obj so trying with image bitmap instead
+    videoFrame(inputStream), // source video
 
     // cropped from source
     topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
@@ -288,8 +289,8 @@ function faceFrame(face, inputStream: MediaStream) {
 
   // Edge case 2: first detection of face = avoid blooming projection onto canvas
   if (firstDetection) {
-    smoothedX = inputStream.videoWidth / 2;
-    smoothedY = inputStream.videoHeight / 2;
+    smoothedX = width / 2;
+    smoothedY = height / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
@@ -300,14 +301,8 @@ function faceFrame(face, inputStream: MediaStream) {
  * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
  */
 function zoomReset(inputStream: MediaStream) {
-  // Grab the first video track
-  const track = inputStream.getVideoTracks()[0];
-  if (!track) return; // no video → nothing to do
-
-  const settings = track.getSettings();
-  const width = settings.width ?? 0; // fallback if undefined
-  const height = settings.height ?? 0;
-
+  width = settings.width ?? 0;
+  height = settings.height ?? 0;
   smoothedX =
     (width / 2) * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
 
@@ -350,11 +345,15 @@ export async function init(config_path: string) {
   keepZoomReset = CONFIG.framing.keepZoomReset;
 
   await initializefaceDetector(); // returns promises
+
+  canvas.width = CONFIG.canvas.width; // 640;
+  canvas.height = CONFIG.canvas.height; // 480;
+
   exportStream = canvas.captureStream();
 }
 // init();
 
-function exportFramedStream() {
-  console.log("inside exportFramedStream");
-  return canvas.captureStream(); //CONFIG.canvas.frameRate
-}
+// function exportFramedStream() {
+//   console.log("inside exportFramedStream");
+//   return canvas.captureStream(); //CONFIG.canvas.frameRate
+// }

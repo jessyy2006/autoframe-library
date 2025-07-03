@@ -16,7 +16,7 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "lib": ["dom", "DOM", "DOM.Iterable", "es5", "scripthost", "es6", "es2017"],
+    "lib": ["dom", "DOM.Iterable", "es5", "scripthost", "es6", "es2017"],
     "baseUrl": "./src",
     "rootDir": "./src",
     "isolatedModules": true
