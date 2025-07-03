@@ -1,8 +1,30 @@
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 export interface AutoFramingConfig {
-  // should i update this to also have the rest of the stuff needed in the cnofig?
-  apiBaseUrl?: string;
+  apiBaseUrl?: string; // what is this for again
+
+  mediapipe: {
+    visionTasksWasm: string;
+
+    faceDetector: {
+      modelAssetPath: string;
+      delegate: "GPU" | "CPU";
+      runningMode: "VIDEO" | "IMAGE";
+      minDetectionConfidence: number;
+    };
+  };
+
+  framing: {
+    TARGET_FACE_RATIO: number;
+    SMOOTHING_FACTOR: number;
+    keepZoomReset: boolean;
+  };
+
+  canvas: {
+    width: number;
+    height: number;
+    frameRate: number;
+  };
 }
 
 // Global variables
@@ -30,7 +52,7 @@ async function loadConfig(config_path: string) {
     }
 
     // 3. json() parses the JSON response into a JavaScript object
-    CONFIG = await response.json();
+    CONFIG = (await response.json()) as AutoFramingConfig;
 
     console.log("Config loaded successfully:", CONFIG);
     console.log("API Base URL:", CONFIG.apiBaseUrl);
