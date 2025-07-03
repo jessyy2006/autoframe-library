@@ -170,6 +170,13 @@ export function autoframe(inputStream: MediaStream): MediaStream {
   CONFIG.canvas.frameRate = settings.frameRate;
   console.log("Config loaded successfully:", CONFIG);
 
+  // at this point, canvas still 0 so export stream gives 0x0 pixels. only in autoframe does config update to be the firght canvas size,
+  canvas.width = CONFIG.canvas.width; // 640;
+  canvas.height = CONFIG.canvas.height; // 480;
+  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
+
+  exportStream = canvas.captureStream();
+
   predictionLoop(inputStream);
 
   return exportStream;
@@ -179,7 +186,7 @@ export function autoframe(inputStream: MediaStream): MediaStream {
 async function predictionLoop(inputStream: MediaStream) {
   console.log("inside predictionLoop");
   let now = performance.now();
-  console.log("prediction interval ", CONFIG.predictionInterval);
+  // console.log("prediction interval ", CONFIG.predictionInterval);
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
@@ -370,10 +377,4 @@ export async function init(config_path: string) {
   keepZoomReset = CONFIG.framing.keepZoomReset;
 
   await initializefaceDetector(); // returns promises
-
-  canvas.width = CONFIG.canvas.width; // 640;
-  canvas.height = CONFIG.canvas.height; // 480;
-  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
-
-  exportStream = canvas.captureStream();
 }

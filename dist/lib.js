@@ -4123,13 +4123,16 @@ function autoframe(inputStream) {
   CONFIG.canvas.height = settings.height;
   CONFIG.canvas.frameRate = settings.frameRate;
   console.log("Config loaded successfully:", CONFIG);
+  canvas.width = CONFIG.canvas.width;
+  canvas.height = CONFIG.canvas.height;
+  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
+  exportStream = canvas.captureStream();
   predictionLoop(inputStream);
   return exportStream;
 }
 async function predictionLoop(inputStream) {
   console.log("inside predictionLoop");
   let now = performance.now();
-  console.log("prediction interval ", CONFIG.predictionInterval);
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
@@ -4250,10 +4253,6 @@ async function init(config_path) {
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
   keepZoomReset = CONFIG.framing.keepZoomReset;
   await initializefaceDetector();
-  canvas.width = CONFIG.canvas.width;
-  canvas.height = CONFIG.canvas.height;
-  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
-  exportStream = canvas.captureStream();
 }
 export {
   autoframe,
