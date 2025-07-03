@@ -4069,6 +4069,7 @@ Kc.prototype.detectForVideo = Kc.prototype.F, Kc.prototype.detect = Kc.prototype
 // src/index.ts
 var CONFIG = {};
 var faceDetector;
+var exportStream = null;
 var TARGET_FACE_RATIO;
 var SMOOTHING_FACTOR;
 var keepZoomReset;
@@ -4108,59 +4109,41 @@ var initializefaceDetector = async () => {
 };
 var canvas = document.createElement("canvas");
 var ctx = canvas.getContext("2d");
-async function enableCam(event, videoElement) {
-  if (!faceDetector) {
-    alert("Face Detector is still loading. Please try again..");
-    return;
-  }
-  const constraints = {
-    video: true
-  };
-  navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-    videoElement.srcObject = exportFramedStream();
-    videoElement.addEventListener("loadeddata", (event2) => {
-      predictWebcam(videoElement);
-    });
-    const videoTrack = stream.getVideoTracks()[0];
-    canvas.width = 320;
-    canvas.height = 200;
-  }).catch((err) => {
-    console.error(err);
-  });
-}
 var lastVideoTime = -1;
-async function predictWebcam(videoElement) {
+function autoframe(inputStream) {
+  let dummy;
   let startTimeMs = performance.now();
-  if (videoElement.currentTime !== lastVideoTime) {
-    lastVideoTime = videoElement.currentTime;
+  if (inputStream.currentTime !== lastVideoTime) {
+    lastVideoTime = inputStream.currentTime;
     const detections = faceDetector.detectForVideo(
-      videoElement,
+      // inputStream, replace w imagebitmap
       startTimeMs
     ).detections;
-    processFrame(detections, videoElement);
+    processFrame(detections, inputStream);
   }
-  window.requestAnimationFrame(() => predictWebcam(videoElement));
+  window.requestAnimationFrame(() => autoframe(inputStream));
+  return dummy;
 }
 var smoothedX = 0;
 var smoothedY = 0;
 var smoothedZoom = 0;
 var firstDetection = true;
 var oldFace = null;
-function processFrame(detections, videoElement) {
+function processFrame(detections, inputStream) {
   if (detections && detections.length > 0) {
     const newFace = detections[0].boundingBox;
     if (!oldFace) {
       oldFace = newFace;
     }
     if (didPositionChange(newFace, oldFace)) {
-      faceFrame(newFace, videoElement);
+      faceFrame(newFace, inputStream);
       oldFace = newFace;
     } else {
-      faceFrame(oldFace, videoElement);
+      faceFrame(oldFace, inputStream);
     }
   } else {
     if (keepZoomReset) {
-      zoomReset(videoElement);
+      zoomReset(inputStream);
     }
   }
   let cropWidth = canvas.width / smoothedZoom;
@@ -4168,14 +4151,14 @@ function processFrame(detections, videoElement) {
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
   topLeftX = Math.max(
     0,
-    Math.min(topLeftX, videoElement.videoWidth - cropWidth)
+    Math.min(topLeftX, inputStream.videoWidth - cropWidth)
   );
   topLeftY = Math.max(
     0,
-    Math.min(topLeftY, videoElement.videoHeight - cropHeight)
+    Math.min(topLeftY, inputStream.videoHeight - cropHeight)
   );
   ctx.drawImage(
-    videoElement,
+    inputStream,
     // source video
     // cropped from source
     topLeftX,
@@ -4195,7 +4178,7 @@ function processFrame(detections, videoElement) {
     canvas.height
   );
 }
-function faceFrame(face, videoElement) {
+function faceFrame(face, inputStream) {
   let xCenter = face.originX + face.width / 2;
   let yCenter = face.originY + face.height / 2;
   smoothedX = xCenter * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
@@ -4205,18 +4188,24 @@ function faceFrame(face, videoElement) {
   if (zoomScale >= 1) {
     smoothedZoom = zoomScale * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
   } else {
-    zoomReset(videoElement);
+    zoomReset(inputStream);
   }
   if (firstDetection) {
-    smoothedX = videoElement.videoWidth / 2;
-    smoothedY = videoElement.videoHeight / 2;
+    smoothedX = inputStream.videoWidth / 2;
+    smoothedY = inputStream.videoHeight / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
 }
-function zoomReset(videoElement) {
-  smoothedX = videoElement.videoWidth / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
-  smoothedY = videoElement.videoHeight / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
+function zoomReset(inputStream) {
+  var _a2, _b;
+  const track = inputStream.getVideoTracks()[0];
+  if (!track) return;
+  const settings = track.getSettings();
+  const width = (_a2 = settings.width) != null ? _a2 : 0;
+  const height = (_b = settings.height) != null ? _b : 0;
+  smoothedX = width / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
+  smoothedY = height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
 function didPositionChange(newFace, oldFace2) {
@@ -4240,13 +4229,10 @@ async function init(config_path) {
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
   keepZoomReset = CONFIG.framing.keepZoomReset;
   await initializefaceDetector();
-}
-function exportFramedStream() {
-  console.log("inside exportFramedStream");
-  return canvas.captureStream();
+  exportStream = canvas.captureStream();
 }
 export {
-  enableCam,
+  autoframe,
   init
 };
 //# sourceMappingURL=lib.js.map

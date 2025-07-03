@@ -182,7 +182,7 @@ export function autoframe(inputStream: MediaStream): MediaStream {
 // function to capture frame
 let videoFrame = (): ImageBitmap => {
   const track = inputStream.getVideoTracks()[0];
-  imageCapture = new ImageCapture(track);
+  imageCapture = new imageCapture(track);
   return imageCapture.grabFrame();
 };
 
