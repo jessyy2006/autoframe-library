@@ -4069,7 +4069,7 @@ Kc.prototype.detectForVideo = Kc.prototype.F, Kc.prototype.detect = Kc.prototype
 // src/index.ts
 var CONFIG = {};
 var faceDetector;
-var exportStream = null;
+var exportStream;
 var TARGET_FACE_RATIO;
 var SMOOTHING_FACTOR;
 var keepZoomReset;
@@ -4126,9 +4126,10 @@ function autoframe(inputStream) {
   canvas.width = CONFIG.canvas.width;
   canvas.height = CONFIG.canvas.height;
   console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
-  exportStream = canvas.captureStream();
   predictionLoop(inputStream);
-  return exportStream;
+  exportStream = canvas.captureStream();
+  console.log(exportStream);
+  return { stream: exportStream, width: canvas.width, height: canvas.height };
 }
 async function predictionLoop(inputStream) {
   console.log("inside predictionLoop");
@@ -4181,6 +4182,17 @@ function processFrame(detections, inputStream, sourceFrame2) {
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
   topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
   topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
+  console.log("ctx draw image will draw with params:", {
+    source: sourceFrame2,
+    sx: topLeftX,
+    sy: topLeftY,
+    sWidth: cropWidth,
+    sHeight: cropHeight,
+    dx: 0,
+    dy: 0,
+    dWidth: canvas.width,
+    dHeight: canvas.height
+  });
   ctx.drawImage(
     // doesnt take mediastream obj so trying with image bitmap instead
     sourceFrame2,

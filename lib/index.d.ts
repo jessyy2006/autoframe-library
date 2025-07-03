@@ -24,6 +24,10 @@ export interface AutoFramingConfig {
 /**
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
-export declare function autoframe(inputStream: MediaStream): MediaStream;
+export declare function autoframe(inputStream: MediaStream): {
+    stream: MediaStream;
+    width: number;
+    height: any;
+};
 export declare function init(config_path: string): Promise<void>;
 //# sourceMappingURL=index.d.ts.map

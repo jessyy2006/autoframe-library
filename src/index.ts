@@ -32,7 +32,7 @@ export interface AutoFramingConfig {
 // Global variables
 let CONFIG: any = {}; // object to hold config
 let faceDetector: FaceDetector; // type: FaceDetector
-let exportStream: MediaStream = null;
+let exportStream: MediaStream;
 
 // defined in config
 let TARGET_FACE_RATIO;
@@ -159,7 +159,11 @@ let sourceFrame;
 /**
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
-export function autoframe(inputStream: MediaStream): MediaStream {
+export function autoframe(inputStream: MediaStream): {
+  stream: MediaStream;
+  width: number;
+  height;
+} {
   console.log("inside autoframe");
   track = inputStream.getVideoTracks()[0];
   settings = track.getSettings();
@@ -170,16 +174,18 @@ export function autoframe(inputStream: MediaStream): MediaStream {
   CONFIG.canvas.frameRate = settings.frameRate;
   console.log("Config loaded successfully:", CONFIG);
 
-  // at this point, canvas still 0 so export stream gives 0x0 pixels. only in autoframe does config update to be the firght canvas size,
   canvas.width = CONFIG.canvas.width; // 640;
   canvas.height = CONFIG.canvas.height; // 480;
-  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
 
-  exportStream = canvas.captureStream();
+  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`); // this works, returns 640 x 480
 
   predictionLoop(inputStream);
 
-  return exportStream;
+  exportStream = canvas.captureStream();
+  console.log(exportStream);
+
+  // return canvas width and height so app can access. should def make this more efficient later w config, just not sure how.
+  return { stream: exportStream, width: canvas.width, height: canvas.height };
 }
 
 // helper functions called by autoframe, processframe to capture frame
@@ -271,6 +277,18 @@ function processFrame(
 
   topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
   topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
+
+  console.log("ctx draw image will draw with params:", {
+    source: sourceFrame,
+    sx: topLeftX,
+    sy: topLeftY,
+    sWidth: cropWidth,
+    sHeight: cropHeight,
+    dx: 0,
+    dy: 0,
+    dWidth: canvas.width,
+    dHeight: canvas.height,
+  });
 
   ctx.drawImage(
     // doesnt take mediastream obj so trying with image bitmap instead
