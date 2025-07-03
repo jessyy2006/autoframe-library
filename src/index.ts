@@ -156,7 +156,7 @@ let width; // need to update to integrate config instead
 let height;
 let lastDetectionTime = 0;
 /**
- * Recursive function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
+ *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export function autoframe(inputStream: MediaStream): MediaStream {
   track = inputStream.getTracks()[0];
@@ -178,7 +178,7 @@ async function predictionLoop(inputStream: MediaStream) {
 
       // Run face detection on the ImageBitmap frame
       const detections = faceDetector.detectForVideo(
-        videoFrame(inputStream),
+        await videoFrame(inputStream),
         now
       ).detections;
 

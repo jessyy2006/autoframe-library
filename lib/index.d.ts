@@ -22,7 +22,7 @@ export interface AutoFramingConfig {
     predictionInterval: 500;
 }
 /**
- * Recursive function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
+ *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export declare function autoframe(inputStream: MediaStream): MediaStream;
 export declare function init(config_path: string): Promise<void>;

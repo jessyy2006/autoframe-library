@@ -4126,7 +4126,7 @@ async function predictionLoop(inputStream) {
     lastDetectionTime = now;
     try {
       const detections = faceDetector.detectForVideo(
-        videoFrame(inputStream),
+        await videoFrame(inputStream),
         now
       ).detections;
       processFrame(detections, inputStream);
