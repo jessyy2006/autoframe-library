@@ -202,6 +202,7 @@ async function predictionLoop(inputStream: MediaStream) {
 
   // Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
   sourceFrame = await videoFrame(inputStream);
+  console.log(`diff in time ${performance.now() - now}`);
 
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
