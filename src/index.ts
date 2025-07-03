@@ -1,5 +1,5 @@
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
-
+let imageCapture: ImageCapture;
 export interface AutoFramingConfig {
   apiBaseUrl?: string; // what is this for again
 
@@ -30,6 +30,8 @@ export interface AutoFramingConfig {
 // Global variables
 let CONFIG: any = {}; // object to hold config
 let faceDetector: FaceDetector; // type: FaceDetector
+let inputStream: MediaStream = null;
+let exportStream: MediaStream = null;
 
 // defined in config
 let TARGET_FACE_RATIO;
@@ -94,65 +96,69 @@ const ctx = canvas.getContext("2d");
 // // Check if webcam access is supported.
 // const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia; // !! converts the result to true or false
 
+// update video element parameter
+
 /**
  * Enable live webcam view and start detection.
  * @param {event} event - event = click.
  */
-export async function enableCam(event: Event, videoElement: HTMLVideoElement) {
-  if (!faceDetector) {
-    alert("Face Detector is still loading. Please try again..");
-    return;
-  }
+// export async function enableCam(event: Event, inputStream: MediaStream) {
+//   if (!faceDetector) {
+//     alert("Face Detector is still loading. Please try again..");
+//     return;
+//   }
 
-  // // Remove the button.
-  // enableWebcamButton.remove();
+//   // // Remove the button.
+//   // enableWebcamButton.remove();
 
-  // getUsermedia parameters
-  const constraints = {
-    video: true,
-  };
+//   // getUsermedia parameters
+//   const constraints = {
+//     video: true,
+//   };
 
-  // Activate the webcam stream.
-  navigator.mediaDevices
-    .getUserMedia(constraints) // returns a Promise — meaning it's asynchronous
-    .then(function (stream) {
-      videoElement.srcObject = exportFramedStream();
+//   // Activate the webcam stream.
+//   navigator.mediaDevices
+//     .getUserMedia(constraints) // returns a Promise — meaning it's asynchronous
+//     .then(function (stream) {
+//       inputStream.srcObject = exportFramedStream();
 
-      // When the video finishes loading and is ready to play, run the predictWebcam function.
-      videoElement.addEventListener("loadeddata", (event) => {
-        predictWebcam(videoElement);
-      });
+//       // When the video finishes loading and is ready to play, run the autoframe function.
+//       inputStream.addEventListener("loadeddata", (event) => {
+//         autoframe(inputStream);
+//       });
 
-      const videoTrack = stream.getVideoTracks()[0];
-      // const settings = videoTrack.getSettings();
+//       const videoTrack = stream.getVideoTracks()[0];
+//       // const settings = videoTrack.getSettings();
 
-      // Store live settings in config so canvas size = video size
-      // CONFIG.canvas.width = settings.width;
-      // CONFIG.canvas.height = settings.height;
-      // CONFIG.canvas.frameRate = settings.frameRate;
+//       // Store live settings in config so canvas size = video size
+//       // CONFIG.canvas.width = settings.width;
+//       // CONFIG.canvas.height = settings.height;
+//       // CONFIG.canvas.frameRate = settings.frameRate;
 
-      canvas.width = 320;
-      // CONFIG.canvas.width; // 640;
-      canvas.height = 200;
-      // CONFIG.canvas.height; // 480;
-    })
-    .catch((err) => {
-      console.error(err);
-    });
-}
+//       canvas.width = 320;
+//       // CONFIG.canvas.width; // 640;
+//       canvas.height = 200;
+//       // CONFIG.canvas.height; // 480;
+//     })
+//     .catch((err) => {
+//       console.error(err);
+//     });
+// }
 
 // FUNCTION CALLED IN ENABLECAM
 let lastVideoTime = -1; // to make sure the func can start (-1 will never be equal to the video time)
 /**
  * Recursive function to continuously track face
  */
-async function predictWebcam(videoElement: HTMLVideoElement) {
+export function autoframe(inputStream: MediaStream): MediaStream {
+  let dummy: MediaStream;
   let startTimeMs = performance.now();
-  // Detect faces using detectForVideo
-  if (videoElement.currentTime !== lastVideoTime) {
-    lastVideoTime = videoElement.currentTime;
+  // Detect faces using detectForVideo. Use grabFrame from Image capture API, which returns imagebitmap which is supported by detectforvideo
+
+  if (inputStream.currentTime !== lastVideoTime) {
+    lastVideoTime = inputStream.currentTime;
     const detections = faceDetector.detectForVideo(
-      videoElement,
+      // inputStream, replace w imagebitmap
       startTimeMs
     ).detections;
     // above line returns an object w params: {
@@ -163,12 +169,22 @@ async function predictWebcam(videoElement: HTMLVideoElement) {
     //   keypoints: [ /* facial landmarks */ ],
     //   confidence: 0.98 // detection certainty
     // }
-    processFrame(detections, videoElement);
+    processFrame(detections, inputStream);
   }
+  // just for testing purposes
 
   // Call this function again to keep predicting when the browser is ready
-  window.requestAnimationFrame(() => predictWebcam(videoElement));
+  window.requestAnimationFrame(() => autoframe(inputStream));
+  // make more efficient, call it only each second or each 500 ms or smth. everyb X seconds load frame
+  return dummy;
 }
+
+// function to capture frame
+let videoFrame = (): ImageBitmap => {
+  const track = inputStream.getVideoTracks()[0];
+  imageCapture = new ImageCapture(track);
+  return imageCapture.grabFrame();
+};
 
 /*************************************************/
 // FACE TRACKING + ZOOM
@@ -185,7 +201,7 @@ let smoothedX = 0,
  * Processes each frame's autoframe crop box and draws it to canvas.
  * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
  */
-function processFrame(detections, videoElement: HTMLVideoElement) {
+function processFrame(detections, inputStream: MediaStream) {
   if (detections && detections.length > 0) {
     // if there is a face
     const newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
@@ -198,16 +214,16 @@ function processFrame(detections, videoElement: HTMLVideoElement) {
     // 2. has there been a significant jump or not?
     if (didPositionChange(newFace, oldFace)) {
       // if true, track newFace
-      faceFrame(newFace, videoElement);
+      faceFrame(newFace, inputStream);
       oldFace = newFace; // if face moved a lot, now new pos = "old" pos as the reference.
     } else {
       // track oldFace
-      faceFrame(oldFace, videoElement);
+      faceFrame(oldFace, inputStream);
     }
   } else {
     if (keepZoomReset) {
       // if user wants camera to zoom out if no face detected
-      zoomReset(videoElement);
+      zoomReset(inputStream);
     } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
   }
 
@@ -219,15 +235,15 @@ function processFrame(detections, videoElement: HTMLVideoElement) {
 
   topLeftX = Math.max(
     0,
-    Math.min(topLeftX, videoElement.videoWidth - cropWidth)
+    Math.min(topLeftX, inputStream.videoWidth - cropWidth)
   );
   topLeftY = Math.max(
     0,
-    Math.min(topLeftY, videoElement.videoHeight - cropHeight)
+    Math.min(topLeftY, inputStream.videoHeight - cropHeight)
   );
 
   ctx.drawImage(
-    videoElement, // source video
+    inputStream, // source video
 
     // cropped from source
     topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
@@ -249,7 +265,7 @@ function processFrame(detections, videoElement: HTMLVideoElement) {
  * Sets up smoothed bounding parameters to autoframe face
  * @param {detection.boundingBox} face - bounding box of tracked face
  */
-function faceFrame(face, videoElement: HTMLVideoElement) {
+function faceFrame(face, inputStream: MediaStream) {
   // EMA formula: smoothedY = targetY * α + smoothedY * (1 - α)
   let xCenter = face.originX + face.width / 2; // x center of face
   let yCenter = face.originY + face.height / 2; // current raw value
@@ -267,27 +283,37 @@ function faceFrame(face, videoElement: HTMLVideoElement) {
     smoothedZoom =
       zoomScale * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
   } else {
-    zoomReset(videoElement); // reset zoom to 1
+    zoomReset(inputStream); // reset zoom to 1
   }
 
   // Edge case 2: first detection of face = avoid blooming projection onto canvas
   if (firstDetection) {
-    smoothedX = videoElement.videoWidth / 2;
-    smoothedY = videoElement.videoHeight / 2;
+    smoothedX = inputStream.videoWidth / 2;
+    smoothedY = inputStream.videoHeight / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
 }
+
+// UPDATED TO ADAPT TO MEDIA STREAM
 /**
  * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
  */
-function zoomReset(videoElement: HTMLVideoElement) {
+function zoomReset(inputStream: MediaStream) {
+  // Grab the first video track
+  const track = inputStream.getVideoTracks()[0];
+  if (!track) return; // no video → nothing to do
+
+  const settings = track.getSettings();
+  const width = settings.width ?? 0; // fallback if undefined
+  const height = settings.height ?? 0;
+
   smoothedX =
-    (videoElement.videoWidth / 2) * SMOOTHING_FACTOR +
-    (1 - SMOOTHING_FACTOR) * smoothedX;
+    (width / 2) * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
+
   smoothedY =
-    (videoElement.videoHeight / 2) * SMOOTHING_FACTOR +
-    (1 - SMOOTHING_FACTOR) * smoothedY;
+    (height / 2) * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
+
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
 /**
@@ -324,14 +350,7 @@ export async function init(config_path: string) {
   keepZoomReset = CONFIG.framing.keepZoomReset;
 
   await initializefaceDetector(); // returns promises
-
-  // // this is specific to the user's site setup...how do i generalize this
-  // if (hasGetUserMedia()) {
-  //   enableWebcamButton = document.getElementById("webcamButton");
-  //   enableWebcamButton.addEventListener("click", enableCam); // When someone clicks this button, run the enableCam function
-  // } else {
-  //   console.warn("getUserMedia() is not supported by your browser");
-  // }
+  exportStream = canvas.captureStream();
 }
 // init();
 

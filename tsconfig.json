@@ -1,38 +1,26 @@
 {
-    "compilerOptions": {
-        "noImplicitAny": false,
-        "module": "ESNext",
-        "target": "es2017",
-        "allowJs": true,
-        "moduleResolution": "bundler",
-        "declaration": true,
-        "declarationMap": true,
-        "declarationDir": "./lib/",
-        "emitDeclarationOnly": true,
-        "outDir": "./lib",
-        "strict": false,
-        "skipLibCheck": true,
-        "importHelpers": true,
-        "allowSyntheticDefaultImports": true,
-        "sourceMap": true,
-        "resolveJsonModule": true,
-        "lib": [
-            "dom",
-            "es5",
-            "scripthost",
-            "es6",
-            "es2017",
-        ],
-        "baseUrl": "./src",
-        "rootDir": "./src",
-        "isolatedModules": true,
-    },
-    "include": [
-        "./src",
-        "./types"
-    ],
-    "exclude": [
-        "node_modules",
-        "src/libs"    
-    ]
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "module": "ESNext",
+    "target": "es2017",
+    "allowJs": true,
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "declarationMap": true,
+    "declarationDir": "./lib/",
+    "emitDeclarationOnly": true,
+    "outDir": "./lib",
+    "strict": false,
+    "skipLibCheck": true,
+    "importHelpers": true,
+    "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "lib": ["dom", "DOM", "DOM.Iterable", "es5", "scripthost", "es6", "es2017"],
+    "baseUrl": "./src",
+    "rootDir": "./src",
+    "isolatedModules": true
+  },
+  "include": ["./src", "./types"],
+  "exclude": ["node_modules", "src/libs"]
 }
