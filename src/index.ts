@@ -186,14 +186,14 @@ async function predictionLoop(inputStream: MediaStream) {
     lastDetectionTime = now;
     try {
       // Grab an ImageBitmap from the video track (snapshot frame)
+      sourceFrame = await videoFrame(inputStream);
 
       // Run face detection on the ImageBitmap frame
       const detections = faceDetector.detectForVideo(
-        await videoFrame(inputStream),
+        sourceFrame,
         now
       ).detections;
 
-      sourceFrame = await videoFrame(inputStream);
       processFrame(detections, inputStream, sourceFrame);
 
       // Remember to close the ImageBitmap to free memory
@@ -206,9 +206,10 @@ async function predictionLoop(inputStream: MediaStream) {
   window.requestAnimationFrame(() => predictionLoop(inputStream));
 }
 
-let videoFrame = (inputStream: MediaStream): ImageBitmap => {
+let videoFrame = async (inputStream: MediaStream): Promise<ImageBitmap> => {
   const imageCapture = new (window as any).ImageCapture(track);
-  return imageCapture.grabFrame();
+
+  return await imageCapture.grabFrame();
 };
 
 /*************************************************/

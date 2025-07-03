@@ -4133,11 +4133,11 @@ async function predictionLoop(inputStream) {
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
+      sourceFrame = await videoFrame(inputStream);
       const detections = faceDetector.detectForVideo(
-        await videoFrame(inputStream),
+        sourceFrame,
         now
       ).detections;
-      sourceFrame = await videoFrame(inputStream);
       processFrame(detections, inputStream, sourceFrame);
     } catch (err) {
       console.error("Error grabbing frame or detecting face:", err);
@@ -4145,9 +4145,9 @@ async function predictionLoop(inputStream) {
   }
   window.requestAnimationFrame(() => predictionLoop(inputStream));
 }
-var videoFrame = (inputStream) => {
+var videoFrame = async (inputStream) => {
   const imageCapture = new window.ImageCapture(track);
-  return imageCapture.grabFrame();
+  return await imageCapture.grabFrame();
 };
 var smoothedX = 0;
 var smoothedY = 0;
