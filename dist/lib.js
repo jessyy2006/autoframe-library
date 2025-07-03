@@ -4114,6 +4114,7 @@ var settings;
 var width;
 var height;
 var lastDetectionTime = 0;
+var sourceFrame;
 function autoframe(inputStream) {
   track = inputStream.getTracks()[0];
   settings = track.getSettings();
@@ -4129,7 +4130,8 @@ async function predictionLoop(inputStream) {
         await videoFrame(inputStream),
         now
       ).detections;
-      processFrame(detections, inputStream);
+      sourceFrame = await videoFrame(inputStream);
+      processFrame(detections, inputStream, sourceFrame);
     } catch (err) {
       console.error("Error grabbing frame or detecting face:", err);
     }
@@ -4145,7 +4147,7 @@ var smoothedY = 0;
 var smoothedZoom = 0;
 var firstDetection = true;
 var oldFace = null;
-function processFrame(detections, inputStream) {
+function processFrame(detections, inputStream, sourceFrame2) {
   if (detections && detections.length > 0) {
     const newFace = detections[0].boundingBox;
     if (!oldFace) {
@@ -4169,7 +4171,7 @@ function processFrame(detections, inputStream) {
   topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
   ctx.drawImage(
     // doesnt take mediastream obj so trying with image bitmap instead
-    videoFrame(inputStream),
+    sourceFrame2,
     // source video
     // cropped from source
     topLeftX,

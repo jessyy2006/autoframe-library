@@ -155,6 +155,7 @@ let settings: MediaTrackSettings;
 let width; // need to update to integrate config instead
 let height;
 let lastDetectionTime = 0;
+let sourceFrame;
 /**
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
@@ -182,7 +183,8 @@ async function predictionLoop(inputStream: MediaStream) {
         now
       ).detections;
 
-      processFrame(detections, inputStream);
+      sourceFrame = await videoFrame(inputStream);
+      processFrame(detections, inputStream, sourceFrame);
 
       // Remember to close the ImageBitmap to free memory
       // videoFrame(inputStream).close();
@@ -214,7 +216,11 @@ let smoothedX = 0,
  * Processes each frame's autoframe crop box and draws it to canvas.
  * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
  */
-function processFrame(detections, inputStream: MediaStream) {
+function processFrame(
+  detections,
+  inputStream: MediaStream,
+  sourceFrame: ImageBitmap
+) {
   if (detections && detections.length > 0) {
     // if there is a face
     const newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
@@ -251,7 +257,7 @@ function processFrame(detections, inputStream: MediaStream) {
 
   ctx.drawImage(
     // doesnt take mediastream obj so trying with image bitmap instead
-    videoFrame(inputStream), // source video
+    sourceFrame, // source video
 
     // cropped from source
     topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
