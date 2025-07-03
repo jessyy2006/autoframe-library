@@ -4111,8 +4111,6 @@ var canvas = document.createElement("canvas");
 var ctx = canvas.getContext("2d");
 var track;
 var settings;
-var width;
-var height;
 var lastDetectionTime = 0;
 var sourceFrame;
 function autoframe(inputStream) {
@@ -4190,8 +4188,8 @@ function processFrame(detections, inputStream, sourceFrame2) {
   let cropWidth = canvas.width / smoothedZoom;
   let cropHeight = canvas.height / smoothedZoom;
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
-  topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
-  topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
+  topLeftX = Math.max(0, Math.min(topLeftX, CONFIG.canvas.width - cropWidth));
+  topLeftY = Math.max(0, Math.min(topLeftY, CONFIG.canvas.height - cropHeight));
   console.log("ctx draw image will draw with params:", {
     source: sourceFrame2,
     sx: topLeftX,
@@ -4239,18 +4237,15 @@ function faceFrame(face, inputStream) {
     zoomReset(inputStream);
   }
   if (firstDetection) {
-    smoothedX = width / 2;
-    smoothedY = height / 2;
+    smoothedX = CONFIG.canvas.width / 2;
+    smoothedY = CONFIG.canvas.height / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
 }
 function zoomReset(inputStream) {
-  var _a2, _b;
-  width = (_a2 = settings.width) != null ? _a2 : 0;
-  height = (_b = settings.height) != null ? _b : 0;
-  smoothedX = width / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
-  smoothedY = height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
+  smoothedX = CONFIG.canvas.width / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
+  smoothedY = CONFIG.canvas.height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
 function didPositionChange(newFace, oldFace2) {

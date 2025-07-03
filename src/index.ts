@@ -152,8 +152,6 @@ let lastVideoTime = -1; // to make sure the func can start (-1 will never be equ
 
 let track: MediaStreamTrack;
 let settings: MediaTrackSettings;
-let width; // need to update to integrate config instead
-let height;
 let lastDetectionTime = 0;
 let sourceFrame;
 /**
@@ -287,8 +285,8 @@ function processFrame(
   let topLeftX = smoothedX - cropWidth / 2,
     topLeftY = smoothedY - cropHeight / 2;
 
-  topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
-  topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
+  topLeftX = Math.max(0, Math.min(topLeftX, CONFIG.canvas.width - cropWidth));
+  topLeftY = Math.max(0, Math.min(topLeftY, CONFIG.canvas.height - cropHeight));
 
   console.log("ctx draw image will draw with params:", {
     source: sourceFrame,
@@ -350,8 +348,8 @@ function faceFrame(face, inputStream: MediaStream) {
 
   // Edge case 2: first detection of face = avoid blooming projection onto canvas
   if (firstDetection) {
-    smoothedX = width / 2;
-    smoothedY = height / 2;
+    smoothedX = CONFIG.canvas.width / 2;
+    smoothedY = CONFIG.canvas.height / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
@@ -362,13 +360,13 @@ function faceFrame(face, inputStream: MediaStream) {
  * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
  */
 function zoomReset(inputStream: MediaStream) {
-  width = settings.width ?? 0;
-  height = settings.height ?? 0;
   smoothedX =
-    (width / 2) * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
+    (CONFIG.canvas.width / 2) * SMOOTHING_FACTOR +
+    (1 - SMOOTHING_FACTOR) * smoothedX;
 
   smoothedY =
-    (height / 2) * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
+    (CONFIG.canvas.height / 2) * SMOOTHING_FACTOR +
+    (1 - SMOOTHING_FACTOR) * smoothedY;
 
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
