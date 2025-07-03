@@ -4122,14 +4122,14 @@ function autoframe(inputStream) {
   CONFIG.canvas.width = settings.width;
   CONFIG.canvas.height = settings.height;
   CONFIG.canvas.frameRate = settings.frameRate;
-  canvas.width = CONFIG.canvas.width;
-  canvas.height = CONFIG.canvas.height;
+  console.log("Config loaded successfully:", CONFIG);
   predictionLoop(inputStream);
   return exportStream;
 }
 async function predictionLoop(inputStream) {
   console.log("inside predictionLoop");
   let now = performance.now();
+  console.log("prediction interval ", CONFIG.predictionInterval);
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
@@ -4199,6 +4199,7 @@ function processFrame(detections, inputStream, sourceFrame2) {
     // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
     canvas.height
   );
+  console.log("finished drawing image");
 }
 function faceFrame(face, inputStream) {
   let xCenter = face.originX + face.width / 2;
@@ -4244,6 +4245,7 @@ function didPositionChange(newFace, oldFace2) {
 }
 async function init(config_path) {
   await loadConfig(config_path);
+  console.log("Config loaded successfully:", CONFIG);
   TARGET_FACE_RATIO = CONFIG.framing.TARGET_FACE_RATIO;
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
   keepZoomReset = CONFIG.framing.keepZoomReset;

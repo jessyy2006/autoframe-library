@@ -19,7 +19,7 @@ export interface AutoFramingConfig {
         height: number;
         frameRate: number;
     };
-    predictionInterval: 500;
+    predictionInterval: number;
 }
 /**
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
