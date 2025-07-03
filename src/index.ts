@@ -160,8 +160,16 @@ let sourceFrame;
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export function autoframe(inputStream: MediaStream): MediaStream {
-  track = inputStream.getTracks()[0];
+  track = inputStream.getVideoTracks()[0];
   settings = track.getSettings();
+
+  // Store live settings in config so canvas size = video size
+  CONFIG.canvas.width = settings.width;
+  CONFIG.canvas.height = settings.height;
+  CONFIG.canvas.frameRate = settings.frameRate;
+
+  canvas.width = CONFIG.canvas.width; // 640;
+  canvas.height = CONFIG.canvas.height; // 480;
 
   predictionLoop(inputStream);
 
