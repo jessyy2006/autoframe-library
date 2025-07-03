@@ -4129,7 +4129,11 @@ function autoframe(inputStream) {
   predictionLoop(inputStream);
   exportStream = canvas.captureStream();
   console.log(exportStream);
-  return { stream: exportStream, width: canvas.width, height: canvas.height };
+  return {
+    framedStream: exportStream,
+    width: canvas.width,
+    height: canvas.height
+  };
 }
 async function predictionLoop(inputStream) {
   console.log("inside predictionLoop");

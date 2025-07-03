@@ -160,7 +160,7 @@ let sourceFrame;
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export function autoframe(inputStream: MediaStream): {
-  stream: MediaStream;
+  framedStream: MediaStream;
   width: number;
   height;
 } {
@@ -185,7 +185,11 @@ export function autoframe(inputStream: MediaStream): {
   console.log(exportStream);
 
   // return canvas width and height so app can access. should def make this more efficient later w config, just not sure how.
-  return { stream: exportStream, width: canvas.width, height: canvas.height };
+  return {
+    framedStream: exportStream,
+    width: canvas.width,
+    height: canvas.height,
+  };
 }
 
 // helper functions called by autoframe, processframe to capture frame

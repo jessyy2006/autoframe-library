@@ -25,7 +25,7 @@ export interface AutoFramingConfig {
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export declare function autoframe(inputStream: MediaStream): {
-    stream: MediaStream;
+    framedStream: MediaStream;
     width: number;
     height: any;
 };
