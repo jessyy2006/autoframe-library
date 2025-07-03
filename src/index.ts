@@ -25,12 +25,13 @@ export interface AutoFramingConfig {
     height: number;
     frameRate: number;
   };
+
+  predictionInterval: 500;
 }
 
 // Global variables
 let CONFIG: any = {}; // object to hold config
 let faceDetector: FaceDetector; // type: FaceDetector
-let inputStream: MediaStream = null;
 let exportStream: MediaStream = null;
 
 // defined in config
@@ -151,42 +152,48 @@ let lastVideoTime = -1; // to make sure the func can start (-1 will never be equ
 
 let track: MediaStreamTrack;
 let settings: MediaTrackSettings;
-let width = 0; // fneed to update to integrate config instead
-let height = 0;
+let width; // need to update to integrate config instead
+let height;
+let lastDetectionTime = 0;
 /**
- * Recursive function to continuously track face
+ * Recursive function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export function autoframe(inputStream: MediaStream): MediaStream {
-  let startTimeMs = performance.now();
-  // Detect faces using detectForVideo. Use grabFrame from Image capture API, which returns imagebitmap which is supported by detectforvideo
-
   track = inputStream.getTracks()[0];
   settings = track.getSettings();
 
-  if (inputStream.currentTime !== lastVideoTime) {
-    lastVideoTime = inputStream.currentTime;
-    const detections = faceDetector.detectForVideo(
-      videoFrame(inputStream), // inputStream, replace w imagebitmap
-      startTimeMs
-    ).detections;
-    // above line returns an object w params: {
-    //   detections: [/* array of detected faces */],
-    //   timestampMs: 123456789 // processing timestamp
-    // } and extracts JUST THE DETECTIONS (1st param), which are objects that contain: {
-    //   boundingBox: { /* x,y,width,height */ },
-    //   keypoints: [ /* facial landmarks */ ],
-    //   confidence: 0.98 // detection certainty
-    // }
-    processFrame(detections, inputStream);
-  }
+  predictionLoop(inputStream);
 
-  // Call this function again to keep predicting when the browser is ready. maybe not recusrive? but has to be recursive right? not sure.
-  window.requestAnimationFrame(() => autoframe(inputStream));
-  // make more efficient, call it only each second or each 500 ms or smth. everyb X seconds load frame
   return exportStream;
 }
 
-// helper function called by autoframe, processframe to capture frame
+// helper functions called by autoframe, processframe to capture frame
+async function predictionLoop(inputStream: MediaStream) {
+  let now = performance.now();
+
+  if (now - lastDetectionTime >= CONFIG.predictionInterval) {
+    lastDetectionTime = now;
+    try {
+      // Grab an ImageBitmap from the video track (snapshot frame)
+
+      // Run face detection on the ImageBitmap frame
+      const detections = faceDetector.detectForVideo(
+        videoFrame(inputStream),
+        now
+      ).detections;
+
+      processFrame(detections, inputStream);
+
+      // Remember to close the ImageBitmap to free memory
+      // videoFrame(inputStream).close();
+    } catch (err) {
+      console.error("Error grabbing frame or detecting face:", err);
+    }
+  }
+  // Schedule next run using requestAnimationFrame for smooth looping
+  window.requestAnimationFrame(() => predictionLoop(inputStream));
+}
+
 let videoFrame = (inputStream: MediaStream): ImageBitmap => {
   const imageCapture = new (window as any).ImageCapture(track);
   return imageCapture.grabFrame();
@@ -351,9 +358,3 @@ export async function init(config_path: string) {
 
   exportStream = canvas.captureStream();
 }
-// init();
-
-// function exportFramedStream() {
-//   console.log("inside exportFramedStream");
-//   return canvas.captureStream(); //CONFIG.canvas.frameRate
-// }

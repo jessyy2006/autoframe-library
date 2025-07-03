@@ -4109,21 +4109,37 @@ var initializefaceDetector = async () => {
 };
 var canvas = document.createElement("canvas");
 var ctx = canvas.getContext("2d");
-var lastVideoTime = -1;
+var track;
+var settings;
+var width;
+var height;
+var lastDetectionTime = 0;
 function autoframe(inputStream) {
-  let dummy;
-  let startTimeMs = performance.now();
-  if (inputStream.currentTime !== lastVideoTime) {
-    lastVideoTime = inputStream.currentTime;
-    const detections = faceDetector.detectForVideo(
-      // inputStream, replace w imagebitmap
-      startTimeMs
-    ).detections;
-    processFrame(detections, inputStream);
-  }
-  window.requestAnimationFrame(() => autoframe(inputStream));
-  return dummy;
+  track = inputStream.getTracks()[0];
+  settings = track.getSettings();
+  predictionLoop(inputStream);
+  return exportStream;
 }
+async function predictionLoop(inputStream) {
+  let now = performance.now();
+  if (now - lastDetectionTime >= CONFIG.predictionInterval) {
+    lastDetectionTime = now;
+    try {
+      const detections = faceDetector.detectForVideo(
+        videoFrame(inputStream),
+        now
+      ).detections;
+      processFrame(detections, inputStream);
+    } catch (err) {
+      console.error("Error grabbing frame or detecting face:", err);
+    }
+  }
+  window.requestAnimationFrame(() => predictionLoop(inputStream));
+}
+var videoFrame = (inputStream) => {
+  const imageCapture = new window.ImageCapture(track);
+  return imageCapture.grabFrame();
+};
 var smoothedX = 0;
 var smoothedY = 0;
 var smoothedZoom = 0;
@@ -4149,16 +4165,11 @@ function processFrame(detections, inputStream) {
   let cropWidth = canvas.width / smoothedZoom;
   let cropHeight = canvas.height / smoothedZoom;
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
-  topLeftX = Math.max(
-    0,
-    Math.min(topLeftX, inputStream.videoWidth - cropWidth)
-  );
-  topLeftY = Math.max(
-    0,
-    Math.min(topLeftY, inputStream.videoHeight - cropHeight)
-  );
+  topLeftX = Math.max(0, Math.min(topLeftX, width - cropWidth));
+  topLeftY = Math.max(0, Math.min(topLeftY, height - cropHeight));
   ctx.drawImage(
-    inputStream,
+    // doesnt take mediastream obj so trying with image bitmap instead
+    videoFrame(inputStream),
     // source video
     // cropped from source
     topLeftX,
@@ -4191,19 +4202,16 @@ function faceFrame(face, inputStream) {
     zoomReset(inputStream);
   }
   if (firstDetection) {
-    smoothedX = inputStream.videoWidth / 2;
-    smoothedY = inputStream.videoHeight / 2;
+    smoothedX = width / 2;
+    smoothedY = height / 2;
     smoothedZoom = 1;
     firstDetection = false;
   }
 }
 function zoomReset(inputStream) {
   var _a2, _b;
-  const track = inputStream.getVideoTracks()[0];
-  if (!track) return;
-  const settings = track.getSettings();
-  const width = (_a2 = settings.width) != null ? _a2 : 0;
-  const height = (_b = settings.height) != null ? _b : 0;
+  width = (_a2 = settings.width) != null ? _a2 : 0;
+  height = (_b = settings.height) != null ? _b : 0;
   smoothedX = width / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
   smoothedY = height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
@@ -4229,6 +4237,8 @@ async function init(config_path) {
   SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
   keepZoomReset = CONFIG.framing.keepZoomReset;
   await initializefaceDetector();
+  canvas.width = CONFIG.canvas.width;
+  canvas.height = CONFIG.canvas.height;
   exportStream = canvas.captureStream();
 }
 export {

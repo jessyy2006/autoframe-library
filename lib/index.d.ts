@@ -1,10 +1,29 @@
 export interface AutoFramingConfig {
     apiBaseUrl?: string;
+    mediapipe: {
+        visionTasksWasm: string;
+        faceDetector: {
+            modelAssetPath: string;
+            delegate: "GPU" | "CPU";
+            runningMode: "VIDEO" | "IMAGE";
+            minDetectionConfidence: number;
+        };
+    };
+    framing: {
+        TARGET_FACE_RATIO: number;
+        SMOOTHING_FACTOR: number;
+        keepZoomReset: boolean;
+    };
+    canvas: {
+        width: number;
+        height: number;
+        frameRate: number;
+    };
+    predictionInterval: 500;
 }
 /**
- * Enable live webcam view and start detection.
- * @param {event} event - event = click.
+ * Recursive function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
-export declare function enableCam(event: Event, videoElement: HTMLVideoElement): Promise<void>;
+export declare function autoframe(inputStream: MediaStream): MediaStream;
 export declare function init(config_path: string): Promise<void>;
 //# sourceMappingURL=index.d.ts.map
