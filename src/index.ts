@@ -160,6 +160,7 @@ let sourceFrame;
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
 export function autoframe(inputStream: MediaStream): MediaStream {
+  console.log("inside autoframe");
   track = inputStream.getVideoTracks()[0];
   settings = track.getSettings();
 
@@ -178,6 +179,7 @@ export function autoframe(inputStream: MediaStream): MediaStream {
 
 // helper functions called by autoframe, processframe to capture frame
 async function predictionLoop(inputStream: MediaStream) {
+  console.log("inside predictionLoop");
   let now = performance.now();
 
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
@@ -231,6 +233,7 @@ function processFrame(
 ) {
   if (detections && detections.length > 0) {
     // if there is a face
+    console.log("there is a face");
     const newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
 
     // 1. initialize oldFace to first EVER face to set anchor to track rest of face movements
@@ -249,7 +252,7 @@ function processFrame(
     }
   } else {
     if (keepZoomReset) {
-      // if user wants camera to zoom out if no face detected
+      console.log("no face"); // if user wants camera to zoom out if no face detected
       zoomReset(inputStream);
     } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
   }
@@ -369,6 +372,7 @@ export async function init(config_path: string) {
 
   canvas.width = CONFIG.canvas.width; // 640;
   canvas.height = CONFIG.canvas.height; // 480;
+  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
 
   exportStream = canvas.captureStream();
 }
