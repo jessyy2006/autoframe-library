@@ -13,6 +13,9 @@ export interface AutoFramingConfig {
         TARGET_FACE_RATIO: number;
         SMOOTHING_FACTOR: number;
         keepZoomReset: boolean;
+        percentThresholdX: number;
+        percentThresholdY: number;
+        percentZoomThreshold: number;
     };
     canvas: {
         width: number;

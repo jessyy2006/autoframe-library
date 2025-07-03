@@ -4136,25 +4136,20 @@ function autoframe(inputStream) {
 async function predictionLoop(inputStream) {
   console.log("inside predictionLoop");
   let now = performance.now();
+  sourceFrame = await videoFrame(inputStream);
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
-      sourceFrame = await videoFrame(inputStream);
-      let test = document.createElement("canvas");
-      test.width = sourceFrame.width;
-      test.height = sourceFrame.height;
-      let draw = test.getContext("2d");
-      document.body.appendChild(test);
-      draw.drawImage(sourceFrame, 0, 0);
       const detections = faceDetector.detectForVideo(
         sourceFrame,
         now
       ).detections;
-      processFrame(detections, inputStream, sourceFrame);
+      processFrame(detections, inputStream);
     } catch (err) {
       console.error("Error grabbing frame or detecting face:", err);
     }
   }
+  drawCurrentFrame(sourceFrame);
   window.requestAnimationFrame(() => predictionLoop(inputStream));
 }
 var videoFrame = async (inputStream) => {
@@ -4166,7 +4161,7 @@ var smoothedY = 0;
 var smoothedZoom = 0;
 var firstDetection = true;
 var oldFace = null;
-function processFrame(detections, inputStream, sourceFrame2) {
+function processFrame(detections, inputStream) {
   if (detections && detections.length > 0) {
     console.log("there is a face");
     const newFace = detections[0].boundingBox;
@@ -4185,6 +4180,8 @@ function processFrame(detections, inputStream, sourceFrame2) {
       zoomReset(inputStream);
     }
   }
+}
+function drawCurrentFrame(sourceFrame2) {
   let cropWidth = canvas.width / smoothedZoom;
   let cropHeight = canvas.height / smoothedZoom;
   let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
@@ -4250,13 +4247,12 @@ function zoomReset(inputStream) {
 }
 function didPositionChange(newFace, oldFace2) {
   console.log("inside did pos change fx");
-  const thresholdX = canvas.width * 0.07;
-  const thresholdY = canvas.height * 0.07;
+  const thresholdX = canvas.width * CONFIG.framing.percentThresholdX;
+  const thresholdY = canvas.height * CONFIG.framing.percentThresholdY;
   const zoomRatio = newFace.width / oldFace2.width;
-  const zoomThreshold = 0.1;
   if (
     // if zoom/position changed a lot.
-    Math.abs(newFace.originX - oldFace2.originX) > thresholdX || Math.abs(newFace.originY - oldFace2.originY) > thresholdY || Math.abs(1 - zoomRatio) > zoomThreshold
+    Math.abs(newFace.originX - oldFace2.originX) > thresholdX || Math.abs(newFace.originY - oldFace2.originY) > thresholdY || Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
   ) {
     return true;
   } else {

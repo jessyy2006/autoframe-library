@@ -18,6 +18,10 @@ export interface AutoFramingConfig {
     TARGET_FACE_RATIO: number;
     SMOOTHING_FACTOR: number;
     keepZoomReset: boolean;
+
+    percentThresholdX: number;
+    percentThresholdY: number;
+    percentZoomThreshold: number;
   };
 
   canvas: {
@@ -194,35 +198,41 @@ export function autoframe(inputStream: MediaStream): {
 async function predictionLoop(inputStream: MediaStream) {
   console.log("inside predictionLoop");
   let now = performance.now();
-  // console.log("prediction interval ", CONFIG.predictionInterval);
+  // draw every frame, but ony check face position every 500 ms. would sitll need pos change. add threshold to config file
+
+  // Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
+  sourceFrame = await videoFrame(inputStream);
+
   if (now - lastDetectionTime >= CONFIG.predictionInterval) {
     lastDetectionTime = now;
     try {
-      // Grab an ImageBitmap from the video track (snapshot frame)
-      sourceFrame = await videoFrame(inputStream);
+      // // Grab an ImageBitmap from the video track (snapshot frame)
+      // sourceFrame = await videoFrame(inputStream);
 
-      // does sourceFrame exist?
-      let test = document.createElement("canvas");
-      test.width = sourceFrame.width; // set canvas width
-      test.height = sourceFrame.height; // set canvas height
-      let draw = test.getContext("2d");
-      document.body.appendChild(test);
+      // // does sourceFrame exist?
+      // let test = document.createElement("canvas");
+      // test.width = sourceFrame.width; // set canvas width
+      // test.height = sourceFrame.height; // set canvas height
+      // let draw = test.getContext("2d");
+      // document.body.appendChild(test);
 
-      draw.drawImage(sourceFrame, 0, 0);
+      // draw.drawImage(sourceFrame, 0, 0);
+
       // Run face detection on the ImageBitmap frame
       const detections = faceDetector.detectForVideo(
         sourceFrame,
         now
       ).detections;
 
-      processFrame(detections, inputStream, sourceFrame);
+      processFrame(detections, inputStream);
 
-      // Remember to close the ImageBitmap to free memory
-      // videoFrame(inputStream).close();
+      // Remember to close the ImageBitmap to free memory (do this when everything else fs works)
+      // sourceFrame.close();
     } catch (err) {
       console.error("Error grabbing frame or detecting face:", err);
     }
   }
+  drawCurrentFrame(sourceFrame);
   // Schedule next run using requestAnimationFrame for smooth looping
   window.requestAnimationFrame(() => predictionLoop(inputStream));
 }
@@ -236,7 +246,6 @@ let videoFrame = async (inputStream: MediaStream): Promise<ImageBitmap> => {
 /*************************************************/
 // FACE TRACKING + ZOOM
 /*************************************************/
-
 // smoothing and drawing declarations
 let smoothedX = 0,
   smoothedY = 0,
@@ -248,11 +257,7 @@ let smoothedX = 0,
  * Processes each frame's autoframe crop box and draws it to canvas.
  * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
  */
-function processFrame(
-  detections,
-  inputStream: MediaStream,
-  sourceFrame: ImageBitmap
-) {
+function processFrame(detections, inputStream: MediaStream) {
   if (detections && detections.length > 0) {
     // if there is a face
     console.log("there is a face");
@@ -279,6 +284,49 @@ function processFrame(
     } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
   }
 
+  // // Edgecase 1: avoid image stacking/black space when crop is smaller than canvas
+  // let cropWidth = canvas.width / smoothedZoom;
+  // let cropHeight = canvas.height / smoothedZoom;
+  // let topLeftX = smoothedX - cropWidth / 2,
+  //   topLeftY = smoothedY - cropHeight / 2;
+
+  // topLeftX = Math.max(0, Math.min(topLeftX, CONFIG.canvas.width - cropWidth));
+  // topLeftY = Math.max(0, Math.min(topLeftY, CONFIG.canvas.height - cropHeight));
+
+  // console.log("ctx draw image will draw with params:", {
+  //   source: sourceFrame,
+  //   sx: topLeftX,
+  //   sy: topLeftY,
+  //   sWidth: cropWidth,
+  //   sHeight: cropHeight,
+  //   dx: 0,
+  //   dy: 0,
+  //   dWidth: canvas.width,
+  //   dHeight: canvas.height,
+  // });
+
+  // ctx.drawImage(
+  //   // doesnt take mediastream obj so trying with image bitmap instead
+  //   sourceFrame, // source video
+
+  //   // cropped from source
+  //   topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
+  //   topLeftY,
+  //   cropWidth, // how wide a piece we're cropping from original vid
+  //   cropHeight, // how tall
+
+  //   // destination
+  //   0, // x coord for where on canvas to start drawing (left->right)
+  //   0, // y coord
+  //   canvas.width, // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
+  //   canvas.height
+  // );
+  // console.log("finished drawing image");
+}
+/**
+ * draws the current frame
+ */
+function drawCurrentFrame(sourceFrame: ImageBitmap) {
   // Edgecase 1: avoid image stacking/black space when crop is smaller than canvas
   let cropWidth = canvas.width / smoothedZoom;
   let cropHeight = canvas.height / smoothedZoom;
@@ -318,6 +366,7 @@ function processFrame(
   );
   console.log("finished drawing image");
 }
+
 /******************************************************************** */
 // FUNCTIONS USED IN processFrame():
 /******************************************************************** */
@@ -355,7 +404,6 @@ function faceFrame(face, inputStream: MediaStream) {
   }
 }
 
-// UPDATED TO ADAPT TO MEDIA STREAM
 /**
  * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
  */
@@ -378,17 +426,17 @@ function zoomReset(inputStream: MediaStream) {
  */
 function didPositionChange(newFace, oldFace) {
   console.log("inside did pos change fx");
-  const thresholdX = canvas.width * 0.07; // 7% of the width
-  const thresholdY = canvas.height * 0.07; // 7% of the height
+  const thresholdX = canvas.width * CONFIG.framing.percentThresholdX; // set to 7% of the width rn
+  const thresholdY = canvas.height * CONFIG.framing.percentThresholdY; // 7% of the height
 
   const zoomRatio = newFace.width / oldFace.width;
-  const zoomThreshold = 0.1; // allow 10% zoom change before reacting
+  // const zoomThreshold = 0.1; // allow 10% zoom change before reacting
 
   if (
     // if zoom/position changed a lot.
     Math.abs(newFace.originX - oldFace.originX) > thresholdX ||
     Math.abs(newFace.originY - oldFace.originY) > thresholdY ||
-    Math.abs(1 - zoomRatio) > zoomThreshold
+    Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
   ) {
     return true;
   } else {
