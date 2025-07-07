@@ -96,61 +96,6 @@ const initializefaceDetector = async () => {
 const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
 
-// // video setup
-// let enableWebcamButton; // type: HTMLButtonElement
-
-// // Check if webcam access is supported.
-// const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia; // !! converts the result to true or false
-
-// update video element parameter
-
-/**
- * Enable live webcam view and start detection.
- * @param {event} event - event = click.
- */
-// export async function enableCam(event: Event, inputStream: MediaStream) {
-//   if (!faceDetector) {
-//     alert("Face Detector is still loading. Please try again..");
-//     return;
-//   }
-
-//   // // Remove the button.
-//   // enableWebcamButton.remove();
-
-//   // getUsermedia parameters
-//   const constraints = {
-//     video: true,
-//   };
-
-//   // Activate the webcam stream.
-//   navigator.mediaDevices
-//     .getUserMedia(constraints) // returns a Promise — meaning it's asynchronous
-//     .then(function (stream) {
-//       inputStream.srcObject = exportFramedStream();
-
-//       // When the video finishes loading and is ready to play, run the autoframe function.
-//       inputStream.addEventListener("loadeddata", (event) => {
-//         autoframe(inputStream);
-//       });
-
-//       const videoTrack = stream.getVideoTracks()[0];
-//       // const settings = videoTrack.getSettings();
-
-//       // Store live settings in config so canvas size = video size
-//       // CONFIG.canvas.width = settings.width;
-//       // CONFIG.canvas.height = settings.height;
-//       // CONFIG.canvas.frameRate = settings.frameRate;
-
-//       canvas.width = 320;
-//       // CONFIG.canvas.width; // 640;
-//       canvas.height = 200;
-//       // CONFIG.canvas.height; // 480;
-//     })
-//     .catch((err) => {
-//       console.error(err);
-//     });
-// }
-
 // FUNCTION CALLED IN ENABLECAM
 let lastVideoTime = -1; // to make sure the func can start (-1 will never be equal to the video time)
 
@@ -158,6 +103,7 @@ let track: MediaStreamTrack;
 let settings: MediaTrackSettings;
 let lastDetectionTime = 0;
 let sourceFrame;
+let newFace;
 /**
  *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
  */
@@ -233,6 +179,8 @@ async function predictionLoop(inputStream: MediaStream) {
       console.error("Error grabbing frame or detecting face:", err);
     }
   }
+
+  faceFrame(newFace, inputStream);
   drawCurrentFrame(sourceFrame);
   // Schedule next run using requestAnimationFrame for smooth looping
   window.requestAnimationFrame(() => predictionLoop(inputStream));
@@ -262,7 +210,7 @@ function processFrame(detections, inputStream: MediaStream) {
   if (detections && detections.length > 0) {
     // if there is a face
     console.log("there is a face");
-    const newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
+    newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
 
     // 1. initialize oldFace to first EVER face to set anchor to track rest of face movements
     if (!oldFace) {
@@ -272,11 +220,11 @@ function processFrame(detections, inputStream: MediaStream) {
     // 2. has there been a significant jump or not?
     if (didPositionChange(newFace, oldFace)) {
       // if true, track newFace
-      faceFrame(newFace, inputStream);
+      // faceFrame(newFace, inputStream);
       oldFace = newFace; // if face moved a lot, now new pos = "old" pos as the reference.
     } else {
       // track oldFace
-      faceFrame(oldFace, inputStream);
+      // faceFrame(oldFace, inputStream);
     }
   } else {
     if (keepZoomReset) {
@@ -284,45 +232,6 @@ function processFrame(detections, inputStream: MediaStream) {
       zoomReset(inputStream);
     } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
   }
-
-  // // Edgecase 1: avoid image stacking/black space when crop is smaller than canvas
-  // let cropWidth = canvas.width / smoothedZoom;
-  // let cropHeight = canvas.height / smoothedZoom;
-  // let topLeftX = smoothedX - cropWidth / 2,
-  //   topLeftY = smoothedY - cropHeight / 2;
-
-  // topLeftX = Math.max(0, Math.min(topLeftX, CONFIG.canvas.width - cropWidth));
-  // topLeftY = Math.max(0, Math.min(topLeftY, CONFIG.canvas.height - cropHeight));
-
-  // console.log("ctx draw image will draw with params:", {
-  //   source: sourceFrame,
-  //   sx: topLeftX,
-  //   sy: topLeftY,
-  //   sWidth: cropWidth,
-  //   sHeight: cropHeight,
-  //   dx: 0,
-  //   dy: 0,
-  //   dWidth: canvas.width,
-  //   dHeight: canvas.height,
-  // });
-
-  // ctx.drawImage(
-  //   // doesnt take mediastream obj so trying with image bitmap instead
-  //   sourceFrame, // source video
-
-  //   // cropped from source
-  //   topLeftX, // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
-  //   topLeftY,
-  //   cropWidth, // how wide a piece we're cropping from original vid
-  //   cropHeight, // how tall
-
-  //   // destination
-  //   0, // x coord for where on canvas to start drawing (left->right)
-  //   0, // y coord
-  //   canvas.width, // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
-  //   canvas.height
-  // );
-  // console.log("finished drawing image");
 }
 /**
  * draws the current frame
