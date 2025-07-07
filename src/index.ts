@@ -174,13 +174,13 @@ async function predictionLoop(inputStream: MediaStream) {
       processFrame(detections, inputStream);
 
       // Remember to close the ImageBitmap to free memory (do this when everything else fs works)
-      // sourceFrame.close();
+      sourceFrame.close();
     } catch (err) {
       console.error("Error grabbing frame or detecting face:", err);
     }
   }
 
-  faceFrame(newFace, inputStream);
+  faceFrame(refFace, inputStream);
   drawCurrentFrame(sourceFrame);
   // Schedule next run using requestAnimationFrame for smooth looping
   window.requestAnimationFrame(() => predictionLoop(inputStream));
@@ -200,7 +200,7 @@ let smoothedX = 0,
   smoothedY = 0,
   smoothedZoom = 0,
   firstDetection = true,
-  oldFace = null;
+  refFace = null;
 
 /**
  * Processes each frame's autoframe crop box and draws it to canvas.
@@ -210,21 +210,21 @@ function processFrame(detections, inputStream: MediaStream) {
   if (detections && detections.length > 0) {
     // if there is a face
     console.log("there is a face");
-    newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make oldFace = face
+    newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make refFace = face
 
-    // 1. initialize oldFace to first EVER face to set anchor to track rest of face movements
-    if (!oldFace) {
-      oldFace = newFace;
+    // 1. initialize refFace to first EVER face to set anchor to track rest of face movements
+    if (!refFace) {
+      refFace = newFace;
     }
 
     // 2. has there been a significant jump or not?
-    if (didPositionChange(newFace, oldFace)) {
+    if (didPositionChange(newFace, refFace)) {
       // if true, track newFace
       // faceFrame(newFace, inputStream);
-      oldFace = newFace; // if face moved a lot, now new pos = "old" pos as the reference.
+      refFace = newFace; // if face moved a lot, now new pos = "old" pos as the reference.
     } else {
-      // track oldFace
-      // faceFrame(oldFace, inputStream);
+      // track refFace
+      // faceFrame(refFace, inputStream);
     }
   } else {
     if (keepZoomReset) {
@@ -331,21 +331,21 @@ function zoomReset(inputStream: MediaStream) {
 /**
  * Every frame, check if face position has changed enough to warrant tracking.
  * @param {detection.boundingBox} newFace - current frame's face bounding box
- * @param {detection.boundingBox} oldFace - most recent "still" frame's face bounding box (anchor)
+ * @param {detection.boundingBox} refFace - most recent "still" frame's face bounding box (anchor)
  * @return {boolean} true = track new, false = track old
  */
-function didPositionChange(newFace, oldFace) {
+function didPositionChange(newFace, refFace) {
   console.log("inside did pos change fx");
   const thresholdX = canvas.width * CONFIG.framing.percentThresholdX; // set to 7% of the width rn
   const thresholdY = canvas.height * CONFIG.framing.percentThresholdY; // 7% of the height
 
-  const zoomRatio = newFace.width / oldFace.width;
+  const zoomRatio = newFace.width / refFace.width;
   // const zoomThreshold = 0.1; // allow 10% zoom change before reacting
 
   if (
     // if zoom/position changed a lot.
-    Math.abs(newFace.originX - oldFace.originX) > thresholdX ||
-    Math.abs(newFace.originY - oldFace.originY) > thresholdY ||
+    Math.abs(newFace.originX - refFace.originX) > thresholdX ||
+    Math.abs(newFace.originY - refFace.originY) > thresholdY ||
     Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
   ) {
     return true;
