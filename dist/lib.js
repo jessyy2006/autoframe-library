@@ -4113,6 +4113,7 @@ var track;
 var settings;
 var lastDetectionTime = 0;
 var sourceFrame;
+var newFace;
 function autoframe(inputStream) {
   console.log("inside autoframe");
   track = inputStream.getVideoTracks()[0];
@@ -4150,6 +4151,7 @@ async function predictionLoop(inputStream) {
       console.error("Error grabbing frame or detecting face:", err);
     }
   }
+  faceFrame(newFace, inputStream);
   drawCurrentFrame(sourceFrame);
   window.requestAnimationFrame(() => predictionLoop(inputStream));
 }
@@ -4165,15 +4167,13 @@ var oldFace = null;
 function processFrame(detections, inputStream) {
   if (detections && detections.length > 0) {
     console.log("there is a face");
-    const newFace = detections[0].boundingBox;
+    newFace = detections[0].boundingBox;
     if (!oldFace) {
       oldFace = newFace;
     }
     if (didPositionChange(newFace, oldFace)) {
-      faceFrame(newFace, inputStream);
       oldFace = newFace;
     } else {
-      faceFrame(oldFace, inputStream);
     }
   } else {
     if (keepZoomReset) {
@@ -4246,14 +4246,14 @@ function zoomReset(inputStream) {
   smoothedY = CONFIG.canvas.height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
   smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
 }
-function didPositionChange(newFace, oldFace2) {
+function didPositionChange(newFace2, oldFace2) {
   console.log("inside did pos change fx");
   const thresholdX = canvas.width * CONFIG.framing.percentThresholdX;
   const thresholdY = canvas.height * CONFIG.framing.percentThresholdY;
-  const zoomRatio = newFace.width / oldFace2.width;
+  const zoomRatio = newFace2.width / oldFace2.width;
   if (
     // if zoom/position changed a lot.
-    Math.abs(newFace.originX - oldFace2.originX) > thresholdX || Math.abs(newFace.originY - oldFace2.originY) > thresholdY || Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
+    Math.abs(newFace2.originX - oldFace2.originX) > thresholdX || Math.abs(newFace2.originY - oldFace2.originY) > thresholdY || Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
   ) {
     return true;
   } else {
