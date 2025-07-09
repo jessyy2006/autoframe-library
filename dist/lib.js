@@ -4067,209 +4067,247 @@ Kc.prototype.detectForVideo = Kc.prototype.F, Kc.prototype.detect = Kc.prototype
 }, Kc.POSE_CONNECTIONS = vc;
 
 // src/index.ts
-var CONFIG = {};
-var faceDetector;
-var exportStream;
-var TARGET_FACE_RATIO;
-var SMOOTHING_FACTOR;
-var keepZoomReset;
-async function loadConfig(config_path) {
-  try {
-    const response = await fetch(config_path);
-    if (!response.ok) {
-      throw new Error(
-        `HTTP error! status: ${response.status} while fetching config.json`
-      );
-    }
-    CONFIG = await response.json();
-    console.log("Config loaded successfully:", CONFIG);
-    console.log("API Base URL:", CONFIG.apiBaseUrl);
-  } catch (error) {
-    console.error("Error loading or parsing config.json:", error);
+var AutoFramingLibrary = class {
+  constructor() {
+    this.canvas = document.createElement("canvas");
+    this.ctx = this.canvas.getContext("2d");
+    // default constructor
+    // VALS FOR SMOOTHING
+    this.smoothedX = 0;
+    this.smoothedY = 0;
+    this.smoothedZoom = 0;
+    this.firstDetection = true;
+    this.refFace = null;
+    this.lastDetectionTime = 0;
+    this.videoFrame = async (inputStream) => {
+      const imageCapture = new window.ImageCapture(this.track);
+      return await imageCapture.grabFrame();
+    };
   }
-}
-var initializefaceDetector = async () => {
-  const vision = await Uo.forVisionTasks(
-    // use await to pause the async func and temporarily return to main thread until promise resolves: force js to finish this statement first before moving onto the second, as the second is dependent on the first. however, browser can still load animations, etc during this time
-    CONFIG.mediapipe.visionTasksWasm
-    // do i still need this if using mediapipe import
-  );
-  faceDetector = await Za.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: CONFIG.mediapipe.faceDetector.modelAssetPath,
-      // `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/ blaze_face_short_range.tflite`, // ML model that detects faces at close range (path to the specific model) // update these based on config
-      delegate: CONFIG.mediapipe.faceDetector.delegate
-      // "GPU", // update these based on config
-    },
-    runningMode: CONFIG.mediapipe.faceDetector.runningMode,
-    // runningMode, update these based on config
-    minDetectionConfidence: CONFIG.mediapipe.faceDetector.minDetectionConfidence
-    // 0.7, update these based on config
-  });
-};
-var canvas = document.createElement("canvas");
-var ctx = canvas.getContext("2d");
-var track;
-var settings;
-var lastDetectionTime = 0;
-var sourceFrame;
-var newFace;
-function autoframe(inputStream) {
-  console.log("inside autoframe");
-  track = inputStream.getVideoTracks()[0];
-  settings = track.getSettings();
-  CONFIG.canvas.width = settings.width;
-  CONFIG.canvas.height = settings.height;
-  CONFIG.canvas.frameRate = settings.frameRate;
-  console.log("Config loaded successfully:", CONFIG);
-  canvas.width = CONFIG.canvas.width;
-  canvas.height = CONFIG.canvas.height;
-  console.log(`canvas width: ${canvas.width}, canvas height: ${canvas.height}`);
-  predictionLoop(inputStream);
-  exportStream = canvas.captureStream();
-  console.log(exportStream);
-  return {
-    framedStream: exportStream,
-    width: canvas.width,
-    height: canvas.height
-  };
-}
-async function predictionLoop(inputStream) {
-  console.log("inside predictionLoop");
-  let now = performance.now();
-  sourceFrame = await videoFrame(inputStream);
-  console.log(`diff in time ${performance.now() - now}`);
-  if (now - lastDetectionTime >= CONFIG.predictionInterval) {
-    lastDetectionTime = now;
+  async init(config_path) {
+    await this.loadConfig(config_path);
+    console.log("Config loaded successfully:", this.CONFIG);
+    this.TARGET_FACE_RATIO = this.CONFIG.framing.TARGET_FACE_RATIO;
+    this.SMOOTHING_FACTOR = this.CONFIG.framing.SMOOTHING_FACTOR;
+    this.keepZoomReset = this.CONFIG.framing.keepZoomReset;
+    await this.initializefaceDetector();
+  }
+  /*******************************************************/
+  // FUNCTIONS CALLED IN init():
+  /*******************************************************/
+  async loadConfig(config_path) {
     try {
-      const detections = faceDetector.detectForVideo(
-        sourceFrame,
-        now
-      ).detections;
-      processFrame(detections, inputStream);
-    } catch (err) {
-      console.error("Error grabbing frame or detecting face:", err);
+      const response = await fetch(config_path);
+      if (!response.ok) {
+        throw new Error(
+          `HTTP error! status: ${response.status} while fetching config.json`
+        );
+      }
+      this.CONFIG = await response.json();
+      console.log("Config loaded successfully:", this.CONFIG);
+      console.log("API Base URL:", this.CONFIG.apiBaseUrl);
+    } catch (error) {
+      console.error("Error loading or parsing config.json:", error);
     }
   }
-  faceFrame(refFace, inputStream);
-  drawCurrentFrame(sourceFrame);
-  window.requestAnimationFrame(() => predictionLoop(inputStream));
-}
-var videoFrame = async (inputStream) => {
-  const imageCapture = new window.ImageCapture(track);
-  return await imageCapture.grabFrame();
-};
-var smoothedX = 0;
-var smoothedY = 0;
-var smoothedZoom = 0;
-var firstDetection = true;
-var refFace = null;
-function processFrame(detections, inputStream) {
-  if (detections && detections.length > 0) {
-    console.log("there is a face");
-    newFace = detections[0].boundingBox;
-    if (!refFace) {
-      refFace = newFace;
+  // Initialize the object detector
+  async initializefaceDetector() {
+    const vision = await Uo.forVisionTasks(
+      // use await to pause the async func and temporarily return to main thread until promise resolves: force js to finish this statement first before moving onto the second, as the second is dependent on the first. however, browser can still load animations, etc during this time
+      this.CONFIG.mediapipe.visionTasksWasm
+      // do i still need this if using mediapipe import
+    );
+    this.faceDetector = await Za.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: this.CONFIG.mediapipe.faceDetector.modelAssetPath,
+        // `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/ blaze_face_short_range.tflite`, // ML model that detects faces at close range (path to the specific model) // update these based on config
+        delegate: this.CONFIG.mediapipe.faceDetector.delegate
+        // "GPU", // update these based on config
+      },
+      runningMode: this.CONFIG.mediapipe.faceDetector.runningMode,
+      // runningMode, update these based on config
+      minDetectionConfidence: this.CONFIG.mediapipe.faceDetector.minDetectionConfidence
+      // 0.7, update these based on config
+    });
+  }
+  /*************************************************/
+  // FACE TRACKING + ZOOM
+  /*************************************************/
+  /**
+   *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
+   */
+  autoframe(inputStream) {
+    console.log("inside autoframe");
+    this.track = inputStream.getVideoTracks()[0];
+    this.settings = this.track.getSettings();
+    this.CONFIG.canvas.width = this.settings.width;
+    this.CONFIG.canvas.height = this.settings.height;
+    this.CONFIG.canvas.frameRate = this.settings.frameRate;
+    console.log("Config loaded successfully:", this.CONFIG);
+    this.canvas.width = this.CONFIG.canvas.width;
+    this.canvas.height = this.CONFIG.canvas.height;
+    console.log(
+      `canvas width: ${this.canvas.width}, canvas height: ${this.canvas.height}`
+    );
+    this.predictionLoop(inputStream);
+    this.exportStream = this.canvas.captureStream();
+    console.log(this.exportStream);
+    return {
+      framedStream: this.exportStream,
+      width: this.canvas.width,
+      height: this.canvas.height
+    };
+  }
+  // helper functions called by autoframe, processframe to capture frame
+  async predictionLoop(inputStream) {
+    console.log("inside predictionLoop");
+    let now = performance.now();
+    this.sourceFrame = await this.videoFrame(inputStream);
+    console.log(`diff in time ${performance.now() - now}`);
+    if (now - this.lastDetectionTime >= this.CONFIG.predictionInterval) {
+      this.lastDetectionTime = now;
+      try {
+        const detections = this.faceDetector.detectForVideo(
+          this.sourceFrame,
+          now
+        ).detections;
+        this.processFrame(detections, inputStream);
+      } catch (err) {
+        console.error("Error grabbing frame or detecting face:", err);
+      }
     }
-    if (didPositionChange(newFace, refFace)) {
-      refFace = newFace;
+    this.faceFrame(this.refFace, inputStream);
+    this.drawCurrentFrame(this.sourceFrame);
+    window.requestAnimationFrame(() => this.predictionLoop(inputStream));
+  }
+  /**
+   * Processes each frame's autoframe crop box and draws it to canvas.
+   * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
+   */
+  processFrame(detections, inputStream) {
+    if (detections && detections.length > 0) {
+      console.log("there is a face");
+      this.newFace = detections[0].boundingBox;
+      if (!this.refFace) {
+        this.refFace = this.newFace;
+      }
+      if (this.didPositionChange(this.newFace, this.refFace)) {
+        this.refFace = this.newFace;
+      } else {
+      }
     } else {
+      if (this.keepZoomReset) {
+        console.log("no face");
+        this.zoomReset(inputStream);
+      }
     }
-  } else {
-    if (keepZoomReset) {
-      console.log("no face");
-      zoomReset(inputStream);
+  }
+  /**
+   * draws the current frame
+   */
+  drawCurrentFrame(sourceFrame) {
+    let cropWidth = this.canvas.width / this.smoothedZoom;
+    let cropHeight = this.canvas.height / this.smoothedZoom;
+    let topLeftX = this.smoothedX - cropWidth / 2, topLeftY = this.smoothedY - cropHeight / 2;
+    topLeftX = Math.max(
+      0,
+      Math.min(topLeftX, this.CONFIG.canvas.width - cropWidth)
+    );
+    topLeftY = Math.max(
+      0,
+      Math.min(topLeftY, this.CONFIG.canvas.height - cropHeight)
+    );
+    console.log("ctx draw image will draw with params:", {
+      source: sourceFrame,
+      sx: topLeftX,
+      sy: topLeftY,
+      sWidth: cropWidth,
+      sHeight: cropHeight,
+      dx: 0,
+      dy: 0,
+      dWidth: this.canvas.width,
+      dHeight: this.canvas.height
+    });
+    this.ctx.drawImage(
+      // doesnt take mediastream obj so trying with image bitmap instead
+      sourceFrame,
+      // source video
+      // cropped from source
+      topLeftX,
+      // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
+      topLeftY,
+      cropWidth,
+      // how wide a piece we're cropping from original vid
+      cropHeight,
+      // how tall
+      // destination
+      0,
+      // x coord for where on canvas to start drawing (left->right)
+      0,
+      // y coord
+      this.canvas.width,
+      // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
+      this.canvas.height
+    );
+    console.log("finished drawing image");
+    this.sourceFrame.close();
+  }
+  /******************************************************************** */
+  // FUNCTIONS USED IN processFrame():
+  /******************************************************************** */
+  /**
+   * Sets up smoothed bounding parameters to autoframe face
+   * @param {detection.boundingBox} face - bounding box of tracked face
+   */
+  faceFrame(face, inputStream) {
+    let xCenter = face.originX + face.width / 2;
+    let yCenter = face.originY + face.height / 2;
+    this.smoothedX = xCenter * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedX;
+    this.smoothedY = yCenter * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedY;
+    let targetFacePixels = this.TARGET_FACE_RATIO * this.canvas.height;
+    let zoomScale = targetFacePixels / face.width;
+    if (zoomScale >= 1) {
+      this.smoothedZoom = zoomScale * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedZoom;
+    } else {
+      this.zoomReset(inputStream);
+    }
+    if (this.firstDetection) {
+      this.smoothedX = this.CONFIG.canvas.width / 2;
+      this.smoothedY = this.CONFIG.canvas.height / 2;
+      this.smoothedZoom = 1;
+      this.firstDetection = false;
     }
   }
-}
-function drawCurrentFrame(sourceFrame2) {
-  let cropWidth = canvas.width / smoothedZoom;
-  let cropHeight = canvas.height / smoothedZoom;
-  let topLeftX = smoothedX - cropWidth / 2, topLeftY = smoothedY - cropHeight / 2;
-  topLeftX = Math.max(0, Math.min(topLeftX, CONFIG.canvas.width - cropWidth));
-  topLeftY = Math.max(0, Math.min(topLeftY, CONFIG.canvas.height - cropHeight));
-  console.log("ctx draw image will draw with params:", {
-    source: sourceFrame2,
-    sx: topLeftX,
-    sy: topLeftY,
-    sWidth: cropWidth,
-    sHeight: cropHeight,
-    dx: 0,
-    dy: 0,
-    dWidth: canvas.width,
-    dHeight: canvas.height
-  });
-  ctx.drawImage(
-    // doesnt take mediastream obj so trying with image bitmap instead
-    sourceFrame2,
-    // source video
-    // cropped from source
-    topLeftX,
-    // top left corner of crop in og vid. no mirroring in this math because want to cam to center person, not just track.
-    topLeftY,
-    cropWidth,
-    // how wide a piece we're cropping from original vid
-    cropHeight,
-    // how tall
-    // destination
-    0,
-    // x coord for where on canvas to start drawing (left->right)
-    0,
-    // y coord
-    canvas.width,
-    // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
-    canvas.height
-  );
-  console.log("finished drawing image");
-}
-function faceFrame(face, inputStream) {
-  let xCenter = face.originX + face.width / 2;
-  let yCenter = face.originY + face.height / 2;
-  smoothedX = xCenter * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
-  smoothedY = yCenter * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
-  let targetFacePixels = TARGET_FACE_RATIO * canvas.height;
-  let zoomScale = targetFacePixels / face.width;
-  if (zoomScale >= 1) {
-    smoothedZoom = zoomScale * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
-  } else {
-    zoomReset(inputStream);
+  /**
+   * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
+   */
+  zoomReset(inputStream) {
+    this.smoothedX = this.CONFIG.canvas.width / 2 * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedX;
+    this.smoothedY = this.CONFIG.canvas.height / 2 * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedY;
+    this.smoothedZoom = 1 * this.SMOOTHING_FACTOR + (1 - this.SMOOTHING_FACTOR) * this.smoothedZoom;
   }
-  if (firstDetection) {
-    smoothedX = CONFIG.canvas.width / 2;
-    smoothedY = CONFIG.canvas.height / 2;
-    smoothedZoom = 1;
-    firstDetection = false;
+  /**
+   * Every frame, check if face position has changed enough to warrant tracking.
+   * @param {detection.boundingBox} newFace - current frame's face bounding box
+   * @param {detection.boundingBox} refFace - most recent "still" frame's face bounding box (anchor)
+   * @return {boolean} true = track new, false = track old
+   */
+  didPositionChange(newFace, refFace) {
+    console.log("inside did pos change fx");
+    const thresholdX = this.canvas.width * this.CONFIG.framing.percentThresholdX;
+    const thresholdY = this.canvas.height * this.CONFIG.framing.percentThresholdY;
+    const zoomRatio = newFace.width / refFace.width;
+    if (
+      // if zoom/position changed a lot.
+      Math.abs(newFace.originX - refFace.originX) > thresholdX || Math.abs(newFace.originY - refFace.originY) > thresholdY || Math.abs(1 - zoomRatio) > this.CONFIG.framing.percentZoomThreshold
+    ) {
+      return true;
+    } else {
+      return false;
+    }
   }
-}
-function zoomReset(inputStream) {
-  smoothedX = CONFIG.canvas.width / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedX;
-  smoothedY = CONFIG.canvas.height / 2 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedY;
-  smoothedZoom = 1 * SMOOTHING_FACTOR + (1 - SMOOTHING_FACTOR) * smoothedZoom;
-}
-function didPositionChange(newFace2, refFace2) {
-  console.log("inside did pos change fx");
-  const thresholdX = canvas.width * CONFIG.framing.percentThresholdX;
-  const thresholdY = canvas.height * CONFIG.framing.percentThresholdY;
-  const zoomRatio = newFace2.width / refFace2.width;
-  if (
-    // if zoom/position changed a lot.
-    Math.abs(newFace2.originX - refFace2.originX) > thresholdX || Math.abs(newFace2.originY - refFace2.originY) > thresholdY || Math.abs(1 - zoomRatio) > CONFIG.framing.percentZoomThreshold
-  ) {
-    return true;
-  } else {
-    return false;
-  }
-}
-async function init(config_path) {
-  await loadConfig(config_path);
-  console.log("Config loaded successfully:", CONFIG);
-  TARGET_FACE_RATIO = CONFIG.framing.TARGET_FACE_RATIO;
-  SMOOTHING_FACTOR = CONFIG.framing.SMOOTHING_FACTOR;
-  keepZoomReset = CONFIG.framing.keepZoomReset;
-  await initializefaceDetector();
-}
+};
 export {
-  autoframe,
-  init
+  AutoFramingLibrary
 };
 //# sourceMappingURL=lib.js.map
