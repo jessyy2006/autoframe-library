@@ -1,7 +1,11 @@
-import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceDetector, FilesetResolver, Detection } from "@mediapipe/tasks-vision";
+import defaultConfig from './defaultConfig.json' assert { type: 'json' };
 
-export interface AutoFramingConfig {
-	apiBaseUrl?: string; // what is this for again
+/**
+ * RainbowAutoFramingConfig defines the configuration options for the RainbowAutoFramingLibrary.
+ * It includes settings for Mediapipe, framing parameters, canvas dimensions, and prediction intervals.
+ */
+export interface RainbowAutoFramingConfig {
 
 	mediapipe: {
 		visionTasksWasm: string;
@@ -18,7 +22,6 @@ export interface AutoFramingConfig {
 		TARGET_FACE_RATIO: number;
 		SMOOTHING_FACTOR: number;
 		keepZoomReset: boolean;
-
 		percentThresholdX: number;
 		percentThresholdY: number;
 		percentZoomThreshold: number;
@@ -33,25 +36,16 @@ export interface AutoFramingConfig {
 	predictionInterval: number;
 }
 
-export class AutoFramingLibrary {
-
-	/*************************************************/
-	// Private variable declarations
-	/*************************************************/
-	private CONFIG: AutoFramingConfig;
-
-	// DEFINED IN CONFIG
-	private TARGET_FACE_RATIO;
-	private SMOOTHING_FACTOR;
-	private keepZoomReset;
+/**
+ * RainbowAutoFramingLibrary is a class that provides autoframing functionality using face detection.
+ * It uses the Mediapipe library to detect faces in a video stream and adjusts the framing accordingly.
+ */
+export class RainbowAutoFramingLibrary {
 
 	// CONTINUOUS FACE DETECTION
 	private faceDetector: FaceDetector;
-	private exportStream: MediaStream;
 	private canvas = document.createElement("canvas");
 	private ctx = this.canvas.getContext("2d");
-
-	public constructor() { } // default constructor
 
 	// VALS FOR SMOOTHING
 	private smoothedX = 0;
@@ -62,66 +56,97 @@ export class AutoFramingLibrary {
 
 	// VARS IN processLoop
 	private track: MediaStreamTrack;
-	private settings: MediaTrackSettings;
+	private trackSettings: MediaTrackSettings;
 	private lastDetectionTime = 0;
 	private sourceFrame;
 	private newFace;
 
-	public async init(config_path: string) {
-		await this.loadConfig(config_path);
-		console.log("Config loaded successfully:", this.CONFIG);
+	private constructor() { }
 
-		this.TARGET_FACE_RATIO = this.CONFIG.framing.TARGET_FACE_RATIO;
-		this.SMOOTHING_FACTOR = this.CONFIG.framing.SMOOTHING_FACTOR;
-		this.keepZoomReset = this.CONFIG.framing.keepZoomReset;
+	public config: RainbowAutoFramingConfig = defaultConfig as RainbowAutoFramingConfig;
 
-		await this.initializefaceDetector(); // returns promises
-	}
+	/* ***************************************************** */
+	/* ** PUBLIC API                                      ** */
+	/* ***************************************************** */
 
-	/*******************************************************/
-	// FUNCTIONS CALLED IN init():
-	/*******************************************************/
+	/**
+	 * Creates an instance of the RainbowAutoFramingLibrary.
+	 * @returns A new instance of the library.
+	 */
+	public static create(): RainbowAutoFramingLibrary { return new RainbowAutoFramingLibrary(); }
 
-	private async loadConfig(config_path: string): Promise<void> {
-		// rejig so tht it takes autoframing config object as param, so that init() can access width/heigt
+	/**
+	 * Initializes the RainbowAutoFramingLibrary with a configuration.
+	 * @param config - Optional configuration object to override default settings.
+	 */
+	public async init(config?: RainbowAutoFramingConfig): Promise<void> {
 		try {
-			// 1. Use fetch to get the JSON file
-			const response = await fetch(config_path);
-
-			// 2. Check if the network request was successful
-			if (!response.ok) {
-				// if not ok
-				throw new Error(
-					`HTTP error! status: ${response.status} while fetching config.json`
-				);
-			}
-
-			// 3. json() parses the JSON response into a JavaScript object
-			this.CONFIG = (await response.json()) as AutoFramingConfig;
-
-			console.log("Config loaded successfully:", this.CONFIG);
-			console.log("API Base URL:", this.CONFIG.apiBaseUrl);
-		} catch (error) {
-			console.error("Error loading or parsing config.json:", error);
-			// might want to initialize with default settings if the config fails to load (should i?)
+			if(config) this.config = config; 
+			await this.initializefaceDetector();
+			console.error(`[RainbowAutoFramingLibrary] init -- success`);
+		}
+		catch (error) {
+			console.error(`[RainbowAutoFramingLibrary] init -- failure -- ${error?.message}`);
+			throw error;
 		}
 	}
 
-	// Initialize the object detector
+	/**
+	 * Start the autoframing process with a MediaStream input.
+	 * @param inputStream - The MediaStream to be processed for autoframing.
+	 * @returns A MediaStream with the autoframed video.
+	 */
+	public autoframe(inputStream: MediaStream): MediaStream {
+		try {
+			this.track = inputStream.getVideoTracks()[0];
+			this.trackSettings = this.track.getSettings();
+
+			// Store live settings in config so canvas size = video size
+			this.config.canvas.width = this.trackSettings.width;
+			this.config.canvas.height = this.trackSettings.height;
+			this.config.canvas.frameRate = this.trackSettings.frameRate;
+
+			this.canvas.width = this.config.canvas.width; // 640;
+			this.canvas.height = this.config.canvas.height; // 480;
+
+			console.log(`canvas width: ${this.canvas.width}, canvas height: ${this.canvas.height}`); 
+			// this works, returns 640 x 480
+
+			this.predictionLoop(inputStream);
+
+			// Return canvas width and height so app can access. 
+			// Should def make this more efficient later w config, just not sure how.
+			return this.canvas.captureStream();
+		}
+		catch (error) {
+			console.error(`[RainbowAutoFramingLibrary] init -- failure -- ${error?.message}`);
+			throw error;
+		}
+	}
+
+
+	/* ***************************************************** */
+	/* ** PRIVATE METHOD                                  ** */
+	/* ***************************************************** */
+	
+	/**
+	 * Initializes the face detector using Mediapipe's FaceDetector.
+	 * This method sets up the face detection model and its options.
+	 * @returns A promise that resolves when the face detector is initialized.
+	 */
 	private async initializefaceDetector() {
 		const vision = await FilesetResolver.forVisionTasks(
 			// use await to pause the async func and temporarily return to main thread until promise resolves: force js to finish this statement first before moving onto the second, as the second is dependent on the first. however, browser can still load animations, etc during this time
-			this.CONFIG.mediapipe.visionTasksWasm // do i still need this if using mediapipe import
+			this.config.mediapipe.visionTasksWasm // do i still need this if using mediapipe import
 		); // "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm" // location of the WebAssembly (WASM) files and other essential assets that the Mediapipe FilesetResolver needs to load to function correctly.
 
 		this.faceDetector = await FaceDetector.createFromOptions(vision, {
 			baseOptions: {
-				modelAssetPath: this.CONFIG.mediapipe.faceDetector.modelAssetPath, // `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/ blaze_face_short_range.tflite`, // ML model that detects faces at close range (path to the specific model) // update these based on config
-				delegate: this.CONFIG.mediapipe.faceDetector.delegate, // "GPU", // update these based on config
+				modelAssetPath: this.config.mediapipe.faceDetector.modelAssetPath, // `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/ blaze_face_short_range.tflite`, // ML model that detects faces at close range (path to the specific model) // update these based on config
+				delegate: this.config.mediapipe.faceDetector.delegate, // "GPU", // update these based on config
 			},
-			runningMode: this.CONFIG.mediapipe.faceDetector.runningMode, // runningMode, update these based on config
-			minDetectionConfidence:
-				this.CONFIG.mediapipe.faceDetector.minDetectionConfidence, // 0.7, update these based on config
+			runningMode: this.config.mediapipe.faceDetector.runningMode, // runningMode, update these based on config
+			minDetectionConfidence: this.config.mediapipe.faceDetector.minDetectionConfidence, // 0.7, update these based on config
 		});
 	}
 
@@ -130,54 +155,19 @@ export class AutoFramingLibrary {
 	/*************************************************/
 
 	/**
-	 *  function to continuously track face. WANT THIS TO BE ONLY CALLED ONCE,
+	 * Main loop for face detection and autoframing.
+	 * This method continuously captures frames from the input stream, detects faces, and adjusts the framing accordingly.
+	 * @param inputStream - The MediaStream to be processed for autoframing.
 	 */
-	public autoframe(inputStream: MediaStream): {
-		framedStream: MediaStream;
-		width: number;
-		height;
-	} {
-		console.log("inside autoframe");
-		this.track = inputStream.getVideoTracks()[0];
-		this.settings = this.track.getSettings();
-
-		// Store live settings in config so canvas size = video size
-		this.CONFIG.canvas.width = this.settings.width;
-		this.CONFIG.canvas.height = this.settings.height;
-		this.CONFIG.canvas.frameRate = this.settings.frameRate;
-		console.log("Config loaded successfully:", this.CONFIG);
-
-		this.canvas.width = this.CONFIG.canvas.width; // 640;
-		this.canvas.height = this.CONFIG.canvas.height; // 480;
-
-		console.log(
-			`canvas width: ${this.canvas.width}, canvas height: ${this.canvas.height}`
-		); // this works, returns 640 x 480
-
-		this.predictionLoop(inputStream);
-
-		this.exportStream = this.canvas.captureStream();
-		console.log(this.exportStream);
-
-		// return canvas width and height so app can access. should def make this more efficient later w config, just not sure how.
-		return {
-			framedStream: this.exportStream,
-			width: this.canvas.width,
-			height: this.canvas.height,
-		};
-	}
-
-	// helper functions called by autoframe, processframe to capture frame
-	async predictionLoop(inputStream: MediaStream): Promise<void> {
-		console.log("inside predictionLoop");
+	private async predictionLoop(inputStream: MediaStream): Promise<void> {
 		let now = performance.now();
 		// draw every frame, but ony check face position every 500 ms. would sitll need pos change. add threshold to config file
 
 		// Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
 		this.sourceFrame = await this.videoFrame(inputStream);
-		console.log(`diff in time ${performance.now() - now}`);
+		//console.log(`diff in time ${performance.now() - now}`);
 
-		if (now - this.lastDetectionTime >= this.CONFIG.predictionInterval) {
+		if (now - this.lastDetectionTime >= this.config.predictionInterval) {
 			this.lastDetectionTime = now;
 			try {
 				// // Grab an ImageBitmap from the video track (snapshot frame)
@@ -193,44 +183,43 @@ export class AutoFramingLibrary {
 				// draw.drawImage(sourceFrame, 0, 0);
 
 				// Run face detection on the ImageBitmap frame
-				const detections = this.faceDetector.detectForVideo(
-					this.sourceFrame,
-					now
-				).detections;
-
+				const detections = this.faceDetector.detectForVideo(this.sourceFrame, now).detections;
 				this.processFrame(detections, inputStream);
-			} catch (err) {
-				console.error("Error grabbing frame or detecting face:", err);
+			} 
+			catch (error) {
+				console.error(`[RainbowAutoFramingLibrary] predictionLoop -- failure -- Error grabbing frame or detecting face ${error?.message}`);
 			}
 		}
 
 		this.faceFrame(this.refFace, inputStream);
 		this.drawCurrentFrame(this.sourceFrame);
+
 		// Schedule next run using requestAnimationFrame for smooth looping
 		window.requestAnimationFrame(() => this.predictionLoop(inputStream));
 	}
-
-	private videoFrame = async (
-		inputStream: MediaStream
-	): Promise<ImageBitmap> => {
+	
+	/**
+	 * Captures a video frame from the MediaStream track.
+	 * @param inputStream - The MediaStream from which to capture the frame.
+	 * @returns A promise that resolves to an ImageBitmap of the captured frame.
+	 */
+	private async videoFrame(inputStream: MediaStream): Promise<ImageBitmap> {
 		const imageCapture = new (window as any).ImageCapture(this.track);
 		return await imageCapture.grabFrame();
-	};
+	}
 
 	/**
 	 * Processes each frame's autoframe crop box and draws it to canvas.
 	 * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
 	 */
-	private processFrame(detections, inputStream: MediaStream) {
+	private processFrame(detections: any, inputStream: MediaStream): void {
 		if (detections && detections.length > 0) {
 			// if there is a face
-			console.log("there is a face");
+			//console.log("there is a face");
 			this.newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make refFace = face
 
 			// 1. initialize refFace to first EVER face to set anchor to track rest of face movements
-			if (!this.refFace) {
-				this.refFace = this.newFace;
-			}
+			if (!this.refFace) this.refFace = this.newFace;
 
 			// 2. has there been a significant jump or not?
 			if (this.didPositionChange(this.newFace, this.refFace)) {
@@ -242,9 +231,9 @@ export class AutoFramingLibrary {
 				// faceFrame(refFace, inputStream);
 			}
 		} else {
-			if (this.keepZoomReset) {
+			if (this.config.framing.keepZoomReset) {
 				console.log("no face"); // if user wants camera to zoom out if no face detected
-				this.zoomReset(inputStream);
+				this.zoomReset();
 			} // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
 		}
 	}
@@ -255,19 +244,13 @@ export class AutoFramingLibrary {
 		// Edgecase 1: avoid image stacking/black space when crop is smaller than canvas
 		let cropWidth = this.canvas.width / this.smoothedZoom;
 		let cropHeight = this.canvas.height / this.smoothedZoom;
-		let topLeftX = this.smoothedX - cropWidth / 2,
-			topLeftY = this.smoothedY - cropHeight / 2;
+		let topLeftX = this.smoothedX - cropWidth / 2
+		let topLeftY = this.smoothedY - cropHeight / 2;
 
-		topLeftX = Math.max(
-			0,
-			Math.min(topLeftX, this.CONFIG.canvas.width - cropWidth)
-		);
-		topLeftY = Math.max(
-			0,
-			Math.min(topLeftY, this.CONFIG.canvas.height - cropHeight)
-		);
+		topLeftX = Math.max(0, Math.min(topLeftX, this.config.canvas.width - cropWidth));
+		topLeftY = Math.max(0, Math.min(topLeftY, this.config.canvas.height - cropHeight));
 
-		console.log("ctx draw image will draw with params:", {
+		/*console.log("ctx draw image will draw with params:", {
 			source: sourceFrame,
 			sx: topLeftX,
 			sy: topLeftY,
@@ -277,7 +260,7 @@ export class AutoFramingLibrary {
 			dy: 0,
 			dWidth: this.canvas.width,
 			dHeight: this.canvas.height,
-		});
+		});*/
 
 		this.ctx.drawImage(
 			// doesnt take mediastream obj so trying with image bitmap instead
@@ -295,7 +278,7 @@ export class AutoFramingLibrary {
 			this.canvas.width, // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
 			this.canvas.height
 		);
-		console.log("finished drawing image");
+		//console.log("finished drawing image");
 		// Remember to close the ImageBitmap to free memory (do this when everything else fs works)
 		this.sourceFrame.close();
 	}
@@ -307,36 +290,30 @@ export class AutoFramingLibrary {
 	 * Sets up smoothed bounding parameters to autoframe face
 	 * @param {detection.boundingBox} face - bounding box of tracked face
 	 */
-	private faceFrame(face, inputStream: MediaStream) {
+	private faceFrame(face: any , inputStream: MediaStream): void {
+		const smoothingFactor = this.config.framing.SMOOTHING_FACTOR;
+
 		// EMA formula: smoothedY = targetY * α + smoothedY * (1 - α)
 		let xCenter = face.originX + face.width / 2; // x center of face
 		let yCenter = face.originY + face.height / 2; // current raw value
 
 		// 1. Smooth face position (EMA)
-		this.smoothedX =
-			xCenter * this.SMOOTHING_FACTOR +
-			(1 - this.SMOOTHING_FACTOR) * this.smoothedX;
-		this.smoothedY =
-			yCenter * this.SMOOTHING_FACTOR +
-			(1 - this.SMOOTHING_FACTOR) * this.smoothedY; // use old smoothed value to get new smoothed value. this gets a "ratio" where new smoothedY is made up w a little bit of the new value and most of the old
+		this.smoothedX = xCenter * smoothingFactor + (1 - smoothingFactor) * this.smoothedX;
+		this.smoothedY = yCenter * smoothingFactor + (1 - smoothingFactor) * this.smoothedY;
+		// use old smoothed value to get new smoothed value. this gets a "ratio" where new smoothedY is made up w a little bit of the new value and most of the old
 
 		// 2. calc zoom level
-		let targetFacePixels = this.TARGET_FACE_RATIO * this.canvas.height; // % of the canvas u wanna take up * height of canvas
+		let targetFacePixels = this.config.framing.TARGET_FACE_RATIO * this.canvas.height; // % of the canvas u wanna take up * height of canvas
 		let zoomScale = targetFacePixels / face.width; // how much should our face be scaled based on its current bounding box width
 
 		// Edge case 1: locking zoom at 1 when face comes really close.
-		if (zoomScale >= 1) {
-			this.smoothedZoom =
-				zoomScale * this.SMOOTHING_FACTOR +
-				(1 - this.SMOOTHING_FACTOR) * this.smoothedZoom;
-		} else {
-			this.zoomReset(inputStream); // reset zoom to 1
-		}
+		if (zoomScale >= 1) this.smoothedZoom = zoomScale * smoothingFactor + (1 - smoothingFactor) * this.smoothedZoom;
+		else this.zoomReset(); // reset zoom to 1
 
 		// Edge case 2: first detection of face = avoid blooming projection onto canvas
 		if (this.firstDetection) {
-			this.smoothedX = this.CONFIG.canvas.width / 2;
-			this.smoothedY = this.CONFIG.canvas.height / 2;
+			this.smoothedX = this.config.canvas.width / 2;
+			this.smoothedY = this.config.canvas.height / 2;
 			this.smoothedZoom = 1;
 			this.firstDetection = false;
 		}
@@ -345,44 +322,31 @@ export class AutoFramingLibrary {
 	/**
 	 * When face isn't detected, optional framing reset to default stream determined by keepZoomReset boolean.
 	 */
-	private zoomReset(inputStream: MediaStream) {
-		this.smoothedX =
-			(this.CONFIG.canvas.width / 2) * this.SMOOTHING_FACTOR +
-			(1 - this.SMOOTHING_FACTOR) * this.smoothedX;
-
-		this.smoothedY =
-			(this.CONFIG.canvas.height / 2) * this.SMOOTHING_FACTOR +
-			(1 - this.SMOOTHING_FACTOR) * this.smoothedY;
-
-		this.smoothedZoom =
-			1 * this.SMOOTHING_FACTOR +
-			(1 - this.SMOOTHING_FACTOR) * this.smoothedZoom;
+	private zoomReset() {
+		const smoothingFactor = this.config.framing.SMOOTHING_FACTOR;
+		this.smoothedX = (this.config.canvas.width / 2) * smoothingFactor + (1 - smoothingFactor) * this.smoothedX;
+		this.smoothedY = (this.config.canvas.height / 2) * smoothingFactor + (1 - smoothingFactor) * this.smoothedY;
+		this.smoothedZoom = smoothingFactor + (1 - smoothingFactor) * this.smoothedZoom;
 	}
+
 	/**
 	 * Every frame, check if face position has changed enough to warrant tracking.
-	 * @param {detection.boundingBox} newFace - current frame's face bounding box
-	 * @param {detection.boundingBox} refFace - most recent "still" frame's face bounding box (anchor)
-	 * @return {boolean} true = track new, false = track old
+	 * @param newFace - current frame's face bounding box
+	 * @param refFace - most recent "still" frame's face bounding box (anchor)
+	 * @return true = track new, false = track old
 	 */
-	private didPositionChange(newFace, refFace) {
-		console.log("inside did pos change fx");
-		const thresholdX =
-			this.canvas.width * this.CONFIG.framing.percentThresholdX; // set to 7% of the width rn
-		const thresholdY =
-			this.canvas.height * this.CONFIG.framing.percentThresholdY; // 7% of the height
-
+	private didPositionChange(newFace, refFace): boolean {
+		//console.log("inside did pos change fx");
+		const thresholdX = this.canvas.width * this.config.framing.percentThresholdX; // set to 7% of the width rn
+		const thresholdY = this.canvas.height * this.config.framing.percentThresholdY; // 7% of the height
 		const zoomRatio = newFace.width / refFace.width;
 
-		if (
-			// if zoom/position changed a lot.
+		// if zoom/position changed a lot.
+		return (
 			Math.abs(newFace.originX - refFace.originX) > thresholdX ||
 			Math.abs(newFace.originY - refFace.originY) > thresholdY ||
-			Math.abs(1 - zoomRatio) > this.CONFIG.framing.percentZoomThreshold
-		) {
-			return true;
-		} else {
-			return false;
-		}
+			Math.abs(1 - zoomRatio) > this.config.framing.percentZoomThreshold
+		) 
 	}
 }
 
