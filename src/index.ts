@@ -1,4 +1,4 @@
-import { FaceDetector, FilesetResolver, Detection } from "@mediapipe/tasks-vision";
+import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import defaultConfig from './defaultConfig.json' assert { type: 'json' };
 
 /**
@@ -79,14 +79,25 @@ export class RainbowAutoFramingLibrary {
 	 * Initializes the RainbowAutoFramingLibrary with a configuration.
 	 * @param config - Optional configuration object to override default settings.
 	 */
-	public async init(config?: RainbowAutoFramingConfig): Promise<void> {
+	public async start(config?: RainbowAutoFramingConfig): Promise<void> {
 		try {
-			if(config) this.config = config; 
+			if (config) this.config = config; 
 			await this.initializefaceDetector();
-			console.error(`[RainbowAutoFramingLibrary] init -- success`);
+			console.info(`[RainbowAutoFramingLibrary] start -- success`);
 		}
 		catch (error) {
-			console.error(`[RainbowAutoFramingLibrary] init -- failure -- ${error?.message}`);
+			console.error(`[RainbowAutoFramingLibrary] start -- failure -- ${error?.message}`);
+			throw error;
+		}
+	}
+
+	public async stop(): Promise<void> {
+		try {
+			this.faceDetector.close();
+			console.info(`[RainbowAutoFramingLibrary] stop -- success`);
+		}
+		catch (error) {
+			console.error(`[RainbowAutoFramingLibrary] stop -- failure -- ${error?.message}`);
 			throw error;
 		}
 	}
@@ -99,6 +110,8 @@ export class RainbowAutoFramingLibrary {
 	public autoframe(inputStream: MediaStream): MediaStream {
 		try {
 			this.track = inputStream.getVideoTracks()[0];
+			if (!this.track) return inputStream;
+
 			this.trackSettings = this.track.getSettings();
 
 			// Store live settings in config so canvas size = video size
@@ -119,7 +132,7 @@ export class RainbowAutoFramingLibrary {
 			return this.canvas.captureStream();
 		}
 		catch (error) {
-			console.error(`[RainbowAutoFramingLibrary] init -- failure -- ${error?.message}`);
+			console.error(`[RainbowAutoFramingLibrary] autoframe -- failure -- ${error?.message}`);
 			throw error;
 		}
 	}
@@ -164,7 +177,7 @@ export class RainbowAutoFramingLibrary {
 		// draw every frame, but ony check face position every 500 ms. would sitll need pos change. add threshold to config file
 
 		// Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
-		this.sourceFrame = await this.videoFrame(inputStream);
+		this.sourceFrame = await this.videoFrame();
 		//console.log(`diff in time ${performance.now() - now}`);
 
 		if (now - this.lastDetectionTime >= this.config.predictionInterval) {
@@ -203,7 +216,7 @@ export class RainbowAutoFramingLibrary {
 	 * @param inputStream - The MediaStream from which to capture the frame.
 	 * @returns A promise that resolves to an ImageBitmap of the captured frame.
 	 */
-	private async videoFrame(inputStream: MediaStream): Promise<ImageBitmap> {
+	private async videoFrame(): Promise<ImageBitmap> {
 		const imageCapture = new (window as any).ImageCapture(this.track);
 		return await imageCapture.grabFrame();
 	}

@@ -15,8 +15,8 @@
       "SMOOTHING_FACTOR": 0.1,
       "keepZoomReset": false,
   
-      "percentThresholdX": 0.2,
-      "percentThresholdY": 0.2,
+      "percentThresholdX": 0.07,
+      "percentThresholdY": 0.07,
       "percentZoomThreshold": 0.1
     },
   
