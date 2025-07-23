@@ -1,6 +1,13 @@
 import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import defaultConfig from "./defaultConfig.json" assert { type: "json" };
 
+export interface multFaceBox {
+  padding?: number;
+  originX: number;
+  originY: number;
+  width: number;
+  height: number;
+}
 /**
  * RainbowAutoFramingConfig defines the configuration options for the RainbowAutoFramingLibrary.
  * It includes settings for Mediapipe, framing parameters, canvas dimensions, and prediction intervals.
@@ -37,12 +44,6 @@ export interface RainbowAutoFramingConfig {
   predictionInterval: number;
 }
 
-export interface multFaceBox {
-  padding?: 0;
-  originX: 0;
-  originY: 0;
-  width: number;
-}
 /**
  * RainbowAutoFramingLibrary is a class that provides autoframing functionality using face detection.
  * It uses the Mediapipe library to detect faces in a video stream and adjusts the framing accordingly.
@@ -60,6 +61,7 @@ export class RainbowAutoFramingLibrary {
   private smoothedZoom = 0;
   private firstDetection = true;
   private refFace: any = null;
+  private multNewFace: multFaceBox;
 
   // VARS IN processLoop
   private track: MediaStreamTrack;
@@ -264,39 +266,56 @@ export class RainbowAutoFramingLibrary {
    * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
    */
   private processFrame(detections: any, inputStream: MediaStream): void {
+    console.log("in processFrame");
     if (detections && detections.length == 1) {
       // if there is a face
-      //console.log("there is a face");
+      console.log("there is a face");
       this.newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make refFace = face
+      console.log(this.newFace);
     } else if (detections && detections.length > 1) {
       // if multiple faces
       console.log("mult faces");
       let iteratingFace = detections[0].boundingBox;
 
-      let minX = iteratingFace.originX,
+      let originX = iteratingFace.originX,
         maxX = iteratingFace.originX,
-        minY = iteratingFace.originY,
-        maxXWidth = iteratingFace.width;
+        originY = iteratingFace.originY,
+        maxY = iteratingFace.originY,
+        width = 0,
+        height = 0;
 
       for (let face of detections) {
         // starts with most confident face
-        if (face.boundingBox.originX < minX) minX = face.originX;
-        if (face.originX > maxX) maxX = face.originX;
+        if (!face.boundingBox) continue; // skip if boundingBox is undefined
 
-        if (face.originY < minY) minY = face.originY;
+        // min/max x's
+        if (face.boundingBox.originX < originX)
+          originX = face.boundingBox.originX;
+        if (face.boundingBox.originX > maxX) {
+          maxX = face.boundingBox.originX;
+          width = maxX + face.boundingBox.width - originX; // rightmost originX + width of that box.
+        }
 
-        if (face.width > maxXWidth) maxXWidth = face.width;
+        // min/max y's
+        if (face.boundingBox.originY < originY)
+          originY = face.boundingBox.originY;
+        if (face.boundingBox.originY > maxY) {
+          maxY = face.boundingBox.originY;
+          height = maxY + face.boundingBox.height - originY; // bottom originY + height of that box.
+        }
       }
-      const multNewFace: multFaceBox = {
+      this.multNewFace = {
         padding: 0, // for now, will add to config late if needed
-        originX: minX,
-        originY: minY,
-        width: maxXWidth,
+        originX: originX,
+        originY: originY,
+        width: width,
+        height: height,
       };
-      console.log(multNewFace);
+      console.log(this.multNewFace);
 
-      this.newFace = multNewFace;
+      this.newFace = this.multNewFace;
       console.log(`newFace = ${this.newFace}`);
+      this.drawBoxOverVideo(this.multNewFace);
     } else {
       // if no face
       if (this.config.framing.keepZoomReset) {
@@ -337,17 +356,17 @@ export class RainbowAutoFramingLibrary {
       Math.min(topLeftY, this.config.canvas.height - cropHeight)
     );
 
-    /*console.log("ctx draw image will draw with params:", {
-			source: sourceFrame,
-			sx: topLeftX,
-			sy: topLeftY,
-			sWidth: cropWidth,
-			sHeight: cropHeight,
-			dx: 0,
-			dy: 0,
-			dWidth: this.canvas.width,
-			dHeight: this.canvas.height,
-		});*/
+    console.log("ctx draw image will draw with params:", {
+      source: sourceFrame,
+      sx: topLeftX,
+      sy: topLeftY,
+      sWidth: cropWidth,
+      sHeight: cropHeight,
+      dx: 0,
+      dy: 0,
+      dWidth: this.canvas.width,
+      dHeight: this.canvas.height,
+    });
 
     this.ctx.drawImage(
       // doesnt take mediastream obj so trying with image bitmap instead
@@ -559,10 +578,50 @@ export class RainbowAutoFramingLibrary {
   `;
     document.head.appendChild(style);
   }
+
+  public drawBoxOverVideo(multNewFace: multFaceBox): void {
+    const video = document.getElementById("originalVideo") as HTMLVideoElement;
+    if (!video) {
+      console.error("Video element with id 'originalVideo' not found.");
+      return;
+    }
+
+    // Create or reuse canvas overlay
+    let canvas = document.getElementById("faceOverlay") as HTMLCanvasElement;
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      canvas.id = "faceOverlay";
+      canvas.style.position = "absolute";
+      canvas.style.left = `${video.offsetLeft}px`;
+      canvas.style.top = `${video.offsetTop}px`;
+      canvas.style.pointerEvents = "none"; // Let clicks pass through
+      canvas.style.zIndex = "999";
+      video.parentElement?.appendChild(canvas);
+    }
+
+    // Match canvas size to video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw the bounding box
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 3;
+
+    const padding = multNewFace.padding || 0;
+
+    ctx.strokeRect(
+      multNewFace.originX - padding,
+      multNewFace.originY - padding,
+      multNewFace.width + padding * 2,
+      multNewFace.height + padding * 2 // Assuming square box
+    );
+  }
 }
 
 /* TODOS:
-1. make default config and only update to user's config if that value exists
-2. fix uncaught promise error at the end of process frame
 3. make tracking less jittery with smooth tracking from one place to the next without intermediate stops + abrupt changes
 */
