@@ -37,6 +37,12 @@ export interface RainbowAutoFramingConfig {
   predictionInterval: number;
 }
 
+export interface multFaceBox {
+  padding?: 0;
+  originX: 0;
+  originY: 0;
+  width: number;
+}
 /**
  * RainbowAutoFramingLibrary is a class that provides autoframing functionality using face detection.
  * It uses the Mediapipe library to detect faces in a video stream and adjusts the framing accordingly.
@@ -258,28 +264,58 @@ export class RainbowAutoFramingLibrary {
    * @param {detections[]} detections - array of detection objects (detected faces), from most high confidence to least.
    */
   private processFrame(detections: any, inputStream: MediaStream): void {
-    if (detections && detections.length > 0) {
+    if (detections && detections.length == 1) {
       // if there is a face
       //console.log("there is a face");
       this.newFace = detections[0].boundingBox; // most prom face -> get box. maybe delete this and just make refFace = face
+    } else if (detections && detections.length > 1) {
+      // if multiple faces
+      console.log("mult faces");
+      let iteratingFace = detections[0].boundingBox;
 
-      // 1. initialize refFace to first EVER face to set anchor to track rest of face movements
-      if (!this.refFace) this.refFace = this.newFace;
+      let minX = iteratingFace.originX,
+        maxX = iteratingFace.originX,
+        minY = iteratingFace.originY,
+        maxXWidth = iteratingFace.width;
 
-      // 2. has there been a significant jump or not?
-      if (this.didPositionChange(this.newFace, this.refFace)) {
-        // if true, track newFace
-        // faceFrame(newFace, inputStream);
-        this.refFace = this.newFace; // if face moved a lot, now new pos = "old" pos as the reference.
-      } else {
-        // track refFace
-        // faceFrame(refFace, inputStream);
+      for (let face of detections) {
+        // starts with most confident face
+        if (face.boundingBox.originX < minX) minX = face.originX;
+        if (face.originX > maxX) maxX = face.originX;
+
+        if (face.originY < minY) minY = face.originY;
+
+        if (face.width > maxXWidth) maxXWidth = face.width;
       }
+      const multNewFace: multFaceBox = {
+        padding: 0, // for now, will add to config late if needed
+        originX: minX,
+        originY: minY,
+        width: maxXWidth,
+      };
+      console.log(multNewFace);
+
+      this.newFace = multNewFace;
+      console.log(`newFace = ${this.newFace}`);
     } else {
+      // if no face
       if (this.config.framing.keepZoomReset) {
         console.log("no face"); // if user wants camera to zoom out if no face detected
         this.zoomReset();
       } // ALSO: make the transition between this smoother. if detected, then not detected, then detected (usntable detection), make sure it doesn't jump between zooms weirdly
+    }
+
+    // 1. initialize refFace to first EVER face to set anchor to track rest of face movements
+    if (!this.refFace) this.refFace = this.newFace;
+
+    // 2. has there been a significant jump or not?
+    if (this.didPositionChange(this.newFace, this.refFace)) {
+      // if true, track newFace
+      // faceFrame(newFace, inputStream);
+      this.refFace = this.newFace; // if face moved a lot, now new pos = "old" pos as the reference.
+    } else {
+      // track refFace
+      // faceFrame(refFace, inputStream);
     }
   }
   /**
@@ -326,7 +362,7 @@ export class RainbowAutoFramingLibrary {
       // destination
       0, // x coord for where on canvas to start drawing (left->right)
       0, // y coord
-      this.canvas.width, // since canvas width/height is hardcoded to my video resolution, this maintains aspect ratio. should change this to update to whatever cam resolution rainbow uses.
+      this.canvas.width,
       this.canvas.height
     );
     //console.log("finished drawing image");
