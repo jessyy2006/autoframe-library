@@ -201,47 +201,61 @@ export class RainbowAutoFramingLibrary {
     divId?: HTMLElement,
     video?: HTMLVideoElement
   ): Promise<void> {
-    let now = performance.now();
-    // draw every frame, but ony check face position every 500 ms. would sitll need pos change. add threshold to config file
+    try {
+      let now = performance.now();
+      // draw every frame, but ony check face position every 500 ms. would sitll need pos change. add threshold to config file
 
-    // Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
-    this.sourceFrame = await this.videoFrame();
-    //console.log(`diff in time ${performance.now() - now}`);
+      // Grab an ImageBitmap from the video track (snapshot frame). will draw no matter what
+      this.sourceFrame = await this.videoFrame();
+      //console.log(`diff in time ${performance.now() - now}`);
 
-    if (now - this.lastDetectionTime >= this.config.predictionInterval) {
-      this.lastDetectionTime = now;
-      try {
-        // Run face detection on the ImageBitmap frame
-        this.detections = await this.faceDetector.detectForVideo(
-          this.sourceFrame,
-          now
-        ).detections;
-        this.processFrame(this.detections, inputStream);
+      if (now - this.lastDetectionTime >= this.config.predictionInterval) {
+        this.lastDetectionTime = now;
+        try {
+          // Run face detection on the ImageBitmap frame
+          this.detections = await this.faceDetector.detectForVideo(
+            this.sourceFrame,
+            now
+          ).detections;
+          this.processFrame(this.detections, inputStream);
 
-        // only run if div and video element exist
-        console.log(
-          "divId:",
-          divId,
-          "video:",
-          video,
-          "detections:",
-          this.detections
-        );
-        if (divId && video) {
-          console.log("About to display detections");
-          this.displayVideoDetections(this.detections, divId, video);
-          console.log("displaying detection");
+          // only run if div and video element exist
+          // console.log(
+          //   "divId:",
+          //   divId,
+          //   "video:",
+          //   video,
+          //   "detections:",
+          //   this.detections
+          // );
+          if (divId && video) {
+            console.log("About to display detections");
+            this.displayVideoDetections(this.detections, divId, video);
+            console.log("displaying detection");
+          }
+        } catch (error) {
+          console.error(
+            `[RainbowAutoFramingLibrary] predictionLoop -- failure -- Error grabbing frame or detecting face ${error?.message}`
+          );
         }
-      } catch (error) {
-        console.error(
-          `[RainbowAutoFramingLibrary] predictionLoop -- failure -- Error grabbing frame or detecting face ${error?.message}`
-        );
       }
+      // add try cathc around these two to see if the error occurs in these 2 functions
+      // this.faceFrame(this.refFace, inputStream);
+      console.log("detections.length = ", this.detections.length);
+      if (this.detections && this.detections.length > 1) {
+        console.log("running MULT face");
+        this.multiFaceFrame(this.multNewFace, this.detections);
+      } else {
+        console.log("running ONE face");
+        this.faceFrame(this.refFace);
+      }
+
+      this.drawCurrentFrame(this.sourceFrame);
+    } catch (error) {
+      console.error(
+        `[RainbowAutoFramingLibrary] predictionLoop -- failure -- Error  ${error?.message}`
+      );
     }
-
-    this.faceFrame(this.refFace, inputStream);
-    this.drawCurrentFrame(this.sourceFrame);
-
     // Schedule next run using requestAnimationFrame for smooth looping
     // if want to show bounding box
 
@@ -249,7 +263,7 @@ export class RainbowAutoFramingLibrary {
       if (divId && video) this.predictionLoop(inputStream, divId, video);
       else this.predictionLoop(inputStream);
     });
-  }
+  } // add try ctach to revert to normal video
 
   /**
    * Captures a video frame from the MediaStream track.
@@ -277,14 +291,21 @@ export class RainbowAutoFramingLibrary {
       console.log("mult faces");
       let iteratingFace = detections[0].boundingBox;
 
+      let width = 0,
+        height = 0;
+
       let originX = iteratingFace.originX,
         maxX = iteratingFace.originX,
         originY = iteratingFace.originY,
-        maxY = iteratingFace.originY,
-        width = 0,
-        height = 0;
+        widthOfBox = iteratingFace.width,
+        heightOfBox = iteratingFace.height,
+        maxY = iteratingFace.originY;
+
+      let lowestPoint = iteratingFace.originY,
+        highestPoint = iteratingFace.originY + iteratingFace.height;
 
       for (let face of detections) {
+        // find relevant coords for framing
         // starts with most confident face
         if (!face.boundingBox) continue; // skip if boundingBox is undefined
 
@@ -293,21 +314,37 @@ export class RainbowAutoFramingLibrary {
           originX = face.boundingBox.originX;
         if (face.boundingBox.originX > maxX) {
           maxX = face.boundingBox.originX;
-          width = maxX + face.boundingBox.width - originX; // rightmost originX + width of that box.
+          // width = maxX + widthOfBox- originX; // rightmost originX + width of that box.
+          widthOfBox = face.boundingBox.width;
         }
 
-        // min/max y's
-        if (face.boundingBox.originY < originY)
-          originY = face.boundingBox.originY;
-        if (face.boundingBox.originY > maxY) {
-          maxY = face.boundingBox.originY;
-          height = maxY + face.boundingBox.height - originY; // bottom originY + height of that box.
+        if (face.boundingBox.originY < lowestPoint) {
+          lowestPoint = face.boundingBox.originY;
         }
+
+        if (face.boundingBox.originY + face.boundingBox.height > highestPoint) {
+          highestPoint = face.boundingBox.originY + face.boundingBox.height;
+        }
+
+        //   if (face.boundingBox.originY < originY)
+        //     // min/max y's
+        //     originY = face.boundingBox.originY;
+        // if (face.boundingBox.originY > maxY) {
+        //   maxY = face.boundingBox.originY;
+        //   if (face.boundingBox.height > heightOfBox)
+        //     heightOfBox = face.boundingBox.height;
+        //   // height = maxY + face.boundingBox.height - originY; // bottom originY + height of that box.
+        // }
       }
+
+      width = maxX + widthOfBox - originX; // rightmost originX + width of that box.
+      height = highestPoint - lowestPoint; // bottom originY + height of that box.
+      // height = maxY + heightOfBox - originY; // bottom originY + height of that box.
+
       this.multNewFace = {
         padding: 0, // for now, will add to config late if needed
         originX: originX,
-        originY: originY,
+        originY: lowestPoint,
         width: width,
         height: height,
       };
@@ -332,10 +369,11 @@ export class RainbowAutoFramingLibrary {
       // if true, track newFace
       // faceFrame(newFace, inputStream);
       this.refFace = this.newFace; // if face moved a lot, now new pos = "old" pos as the reference.
-    } else {
-      // track refFace
-      // faceFrame(refFace, inputStream);
     }
+    //else {
+    //   // track refFace
+    //   // faceFrame(refFace, inputStream);
+    // }
   }
   /**
    * draws the current frame
@@ -396,7 +434,7 @@ export class RainbowAutoFramingLibrary {
    * Sets up smoothed bounding parameters to autoframe face
    * @param {detection.boundingBox} face - bounding box of tracked face
    */
-  private faceFrame(face: any, inputStream: MediaStream): void {
+  private faceFrame(face: any): void {
     const smoothingFactor = this.config.framing.SMOOTHING_FACTOR;
 
     // EMA formula: smoothedY = targetY * α + smoothedY * (1 - α)
@@ -428,6 +466,63 @@ export class RainbowAutoFramingLibrary {
       this.smoothedZoom = 1;
       this.firstDetection = false;
     }
+  }
+
+  /**
+   * Sets up smoothed bounding parameters to autoframe multiple faces
+   * Uses multNewFace bounding box as input
+   */
+  private multiFaceFrame(face: multFaceBox, detections: any[]): void {
+    console.log("in multiface frame");
+    const smoothingFactor = this.config.framing.SMOOTHING_FACTOR;
+
+    // Step 1: Calculate center of all face centers
+    let xTotal = 0,
+      yTotal = 0;
+    for (const det of detections) {
+      const centerX = det.boundingBox.originX + det.boundingBox.width / 2;
+      const centerY = det.boundingBox.originY + det.boundingBox.height / 2;
+      xTotal += centerX;
+      yTotal += centerY;
+    }
+
+    const xCenter = xTotal / detections.length;
+    const yCenter = yTotal / detections.length;
+
+    // Step 2: Smooth center
+    this.smoothedX =
+      xCenter * smoothingFactor + (1 - smoothingFactor) * this.smoothedX;
+    this.smoothedY =
+      yCenter * smoothingFactor + (1 - smoothingFactor) * this.smoothedY;
+
+    // Step 3: Calculate zoom
+    const targetFacePixels =
+      this.config.framing.TARGET_FACE_RATIO * this.canvas.height;
+    const zoomScale = targetFacePixels / face.height;
+
+    // Step 4: Handle zoom edge case
+    if (zoomScale >= 1) {
+      this.smoothedZoom =
+        zoomScale * smoothingFactor + (1 - smoothingFactor) * this.smoothedZoom;
+    } else {
+      this.zoomReset(); // fallback when faces are too close
+    }
+
+    // Step 5: First detection override
+    if (this.firstDetection) {
+      this.smoothedX = this.config.canvas.width / 2;
+      this.smoothedY = this.config.canvas.height / 2;
+      this.smoothedZoom = 1;
+      this.firstDetection = false;
+    }
+
+    console.log(
+      "Multi-face frame center:",
+      this.smoothedX,
+      this.smoothedY,
+      "zoom:",
+      this.smoothedZoom
+    );
   }
 
   /**
@@ -623,5 +718,7 @@ export class RainbowAutoFramingLibrary {
 }
 
 /* TODOS:
-3. make tracking less jittery with smooth tracking from one place to the next without intermediate stops + abrupt changes
+1. add vertical and horizontal padding (mainly horiz padding)
+
+2. make tracking less jittery with smooth tracking from one place to the next without intermediate stops + abrupt changes. i think the intermediate stops occur because it's only tracking the face every 500 ms so the frames are more jittery
 */
