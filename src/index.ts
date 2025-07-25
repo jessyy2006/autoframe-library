@@ -31,6 +31,9 @@ export interface RainbowAutoFramingConfig {
     percentThresholdX: number;
     percentThresholdY: number;
     percentZoomThreshold: number;
+
+    multFacePadX: 20;
+    multFacePadY: 10;
   };
 
   canvas: {
@@ -325,24 +328,17 @@ export class RainbowAutoFramingLibrary {
         if (face.boundingBox.originY + face.boundingBox.height > highestPoint) {
           highestPoint = face.boundingBox.originY + face.boundingBox.height;
         }
-
-        //   if (face.boundingBox.originY < originY)
-        //     // min/max y's
-        //     originY = face.boundingBox.originY;
-        // if (face.boundingBox.originY > maxY) {
-        //   maxY = face.boundingBox.originY;
-        //   if (face.boundingBox.height > heightOfBox)
-        //     heightOfBox = face.boundingBox.height;
-        //   // height = maxY + face.boundingBox.height - originY; // bottom originY + height of that box.
-        // }
       }
 
-      width = maxX + widthOfBox - originX; // rightmost originX + width of that box.
-      height = highestPoint - lowestPoint; // bottom originY + height of that box.
+      console.log(
+        `XY padding = ${this.config.framing.multFacePadX}, ${this.config.framing.multFacePadY}`
+      );
+      width = this.config.framing.multFacePadX + maxX + widthOfBox - originX; // rightmost originX + width of that box.
+      height = this.config.framing.multFacePadY + highestPoint - lowestPoint; // bottom originY + height of that box.
       // height = maxY + heightOfBox - originY; // bottom originY + height of that box.
 
       this.multNewFace = {
-        padding: 0, // for now, will add to config late if needed
+        // padding: 0, // for now, will add to config late if needed
         originX: originX,
         originY: lowestPoint,
         width: width,
